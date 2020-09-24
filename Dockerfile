@@ -19,6 +19,11 @@ WORKDIR ..
 RUN curl -Lo z3.zip https://github.com/Z3Prover/z3/releases/download/z3-4.8.9/z3-4.8.9-x64-ubuntu-16.04.zip
 RUN unzip z3.zip
 ENV PATH $PATH:/home/opam/z3-4.8.9-x64-ubuntu-16.04/bin
+
+RUN opam clean -a
 WORKDIR tezos
+RUN opam clean -a
+RUN rm -rf _opam/
+RUN rm -rf ../.opam/
 COPY exec.sh /home/opam/tezos
 ENTRYPOINT [ "/home/opam/tezos/exec.sh" ]
