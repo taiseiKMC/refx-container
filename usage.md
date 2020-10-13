@@ -66,7 +66,7 @@ There are two files below in the given zip.
     - list, set, map の仕様をある程度記述できるようにするための機能です
     - `ContractAnnot`の前に書いてください
 
-## Syntax
+### Syntax
 ```
 ANNOTATION ::=
 	| Assert RTYPE
@@ -76,7 +76,9 @@ ANNOTATION ::=
 	| LambdaAnnot RTYPE -> RTYPE & RTYPE TVARS
 	| ContractAnnot RTYPE -> RTYPE & RTYPE
 	| ContractAnnot RTYPE -> RTYPE & RTYPE TVARS
-	| Measure VAR : SORT -> SORT where pattern = EXP | PATTERN = EXP
+	| Measure VAR : SORT -> SORT where [] = EXP | VAR :: VAR = EXP	
+	| Measure VAR : SORT -> SORT where EmptySet = EXP | Add e s = EXP
+	| Measure VAR : SORT -> SORT where EmptyMap = EXP | Bind k v m = EXP
 RTYPE ::= { STACK | EXP } # この|、間違えられないか？
 TVARS ::= (VAR : SORT, VAR : SORT, ...)
 VAR ::= [a-z][a-z A-Z 0-9 _ ']*
@@ -130,7 +132,7 @@ SORT ::=
 SORTはほぼMichelsonのtypeと同じですが、key_hashはaddressに統合されている点、lambda が fun になっている点が異なります
 (これ割とすぐに修正可能だしMichelsonのtypeと同じにしてしまった方が良いかも)
 
-### Constructors
+#### Constructors
 EXPとしてコンストラクタを使う場合は型推論によってつける必要がないが、パターン内でコンストラクタを使う場合は、<ty>をつけないといけない場合があります
 
 - `Nil` : list 'a
@@ -155,7 +157,7 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
 - `Overflow` : string
     - mutezの乗算など、オーバーフローした場合に送出される例外を表します
 
-### Built-in Instructions
+#### Built-in Instructions
 全部説明書くんかな...
 - `not` : bool -> bool
 - `get_str` : string -> int -> string
@@ -206,3 +208,97 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
     - `SHA512`命令に相当する関数です
 - `sig` : key -> signature -> bytes -> bool
     - `CHECK_SIGNATURE`命令に相当する関数です
+
+#### Language Spec
+RTYPEのSTACKはどんなとかの話
+
+#### Details
+- `Key`, `Address`, `Signature`はコンストラクタではありません これは`key`, `address`, `signature` の値をパターンによって分解したいことがないと考えられるからです
+- `Timestamp str`の str はRFC3339に沿った文字列である必要があります
+-　現実装では `int` と `nat`, `mutez`, `timestamp`を型レベルで区別していません
+- 結合順序はocaml準拠です
+
+## Examples
+
+### Boomerang.tz
+```boomerang.tz
+{
+  parameter unit;
+  storage unit;
+  << ContractAnnot { arg | True } ->
+      { ops, _ | match ops with [TransferTokens<unit> Unit tz (Contract addr)] -> addr = source && tz = balance | _ -> False } &
+      { exc | False } >>
+  code  { CDR ;
+          NIL operation ;
+          SOURCE ;
+          CONTRACT unit ;
+          ASSERT_SOME ;
+          BALANCE ;
+          UNIT ;
+          TRANSFER_TOKENS ;
+          CONS ;
+          PAIR ;
+        }
+}
+```
+これは`source`へ`balance`を送るoperationを返すプログラムです。
+ContractAnnotには、事前条件は何も仮定せず、事後条件にはその返り値が上で述べた仕様を満たすことを記述しています。
+プログラム中にはスタックトップが`None`のときに例外を送出する`ASSERT_SOME`がありますが、ContractAnnotには例外の値の条件がFalse、つまり例外が起きないことを記述しています。実際`source`のaddressが指すアカウントは人間の操作するアカウントであるはずなので、`CONTRACT unit`は必ず成功するはずです。
+そしてこのソースコードに対して`tezos-client refinement boomerang.tz`を実行すると`VERIFIED`と出力されるでしょう
+
+### checksig.tz
+```
+parameter (pair signature string);
+storage (pair address key);
+<< ContractAnnot
+    { arg | True } ->
+    { ret | match ret.first, Pack arg.first.second with | [TransferTokens<string> _ _ (Contract addr) ], byt -> addr = arg.second.first && sig arg.second.second arg.first.first byt | _ -> False } &
+    { err | err = Error Unit || err = Error 0 } >>
+code  { DUP; DUP; DUP;
+        DIP { CAR; UNPAIR; DIP { PACK } };
+        CDDR;
+        CHECK_SIGNATURE;
+        ASSERT;
+
+        UNPAIR;
+        CDR;
+        SWAP;
+        CAR; CONTRACT string; IF_NONE { PUSH int 0; FAILWITH } {};
+        SWAP;
+        PUSH mutez 1;
+        SWAP;
+        TRANSFER_TOKENS;
+
+        NIL operation;
+        SWAP;
+        CONS;
+        DIP { CDR };
+        PAIR };
+```
+
+このプログラムでは`ASSERT`, `PUSH int 0; FAILWITH`の二箇所からそれぞれ`Error Unit`, `Error 0`の例外が送出され得ます。ContractAnnotでは、この2つの例外が起こりうることを記述しています。
+この例では例外が起こりうることを許容することで事後条件にはより強い主張ができています。上のプログラムでは引数のsignatureの検証、storage上のaddressの指すコントラクトの引数型チェックをしており、それぞれ失敗すると上記の例外が出るわけですが、このプログラムが正常終了した場合はどちらもうまくいっているはずであり、事後条件にはそのことが記述されています。
+
+### sumseq.tz
+```
+{ parameter (list int);
+  storage int;
+  << Measure sumseq : (list int) -> int where Nil = 0 | Cons h t = (h + (sumseq t)) >>
+  << ContractAnnot { arg | True } ->
+      { ret | sumseq (first arg) = second ret }
+      & { exc | False } (l:list int) >>
+  code { CAR;
+         << Assume { x | x = l } >>
+         DIP { PUSH int 0 };
+         << LoopInv { r:s | l = first arg && s + sumseq r = sumseq l } >>
+         ITER { ADD };
+         NIL operation;
+         PAIR;
+       }
+}
+```
+この例は環境変数, Assume, LoopInv, Measureの紹介です。
+このプログラムは、まず先頭で list int の要素を全て足した値を Measure によって定義しています。
+次に Assume によってその時点での stack の値を環境変数`l`に結びつけています。この`l`は ContractAnnot の末尾で定義されたものです。
+そして LoopInv によって ITER 中でのループ不変条件を与えます。`ITER { ADD }`は、list の先頭をスタックの先頭から2番目`s`に全て足す命令です。ループ不変条件`s + sumseq r = sumseq l`は、処理中のリスト`r`の総和に`s`を足すと、最初のリスト`l`の総和と等しくなるということが表現されています。
+LoopInvを減るとそれまでの仮定が失われてしまうので、Assumeで書いた条件は忘れられています。なので`l = first arg`をループ不変条件に追加して、`l`の値の条件が忘れられないようにしています。
