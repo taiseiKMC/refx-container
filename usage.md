@@ -36,5 +36,173 @@ There are two files below in the given zip.
 とりあえず思いついたことを書いてます
 
 - ツールに投げるソースコードは言語 [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html) で記述されたプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードである必要があります
-- `tezos-client refinement`はまずプログラムから`<<`と`>>`で囲まれた注釈を除去し、型チェック`tezos-client typecheck`を実行します
-- 型チェックに成功したら、除去
+
+### Execution Flow
+- `tezos-client refinement <src>`はまずソースコードから`<<`と`>>`で囲まれた注釈を除去し、型チェック`tezos-client typecheck`を実行します
+- 型チェックに成功したら、`tezos-client refinement`は注釈から条件式を生成します
+    - 生成された条件式は`.refx/out.smt2`か、`-l`オプションで指定したディレクトリで確認できます
+- 最後に生成された条件式を `z3` で検証し、その出力をもとに検証器は`VERIFIED`か`UNVERIFIED`を出力します
+
+### Annotation
+注釈は次の6種類です
+- `ContractAnnot`
+    - プログラム全体の事前、事後条件、例外の値の条件及び環境変数を与えます
+    - `code`の直前に書かなければなりません
+- `LambdaAnnot`
+    - `LAMBDA`命令で与える命令列を実行する際の事前、事後条件、例外の値の条件及びLAMBDA内で使える環境変数を与えます
+    - `LAMBDA`命令の直前に書かなければなりません
+- `Assert`
+    - `Assert`を書いた地点までプログラムを実行した際に、与える条件を満たしているか確認します
+    - 命令列中の間に書くことができます
+- `Assume`
+    - 書いた地点以降で与えた条件を仮定します
+    - 命令列中の間に書くことができます
+- `LoopInv`
+    - ループ不変条件を指定します
+    - **ループ以前に仮定された条件は、`LoopInv`に記述したこと以外は全てなくなります**
+    - `LOOP`, `ITER`の直前に書かなければなりません
+        - `MAP`, `LOOP_LEFT` are not yet supported
+- `Measure`
+    - list, set, map の仕様をある程度記述できるようにするための機能です
+    - `ContractAnnot`の前に書いてください
+
+## Syntax
+```
+ANNOTATION ::=
+	| Assert RTYPE
+	| LoopInv RTYPE
+	| Assume RTYPE
+	| LambdaAnnot RTYPE -> RTYPE & RTYPE
+	| LambdaAnnot RTYPE -> RTYPE & RTYPE TVARS
+	| ContractAnnot RTYPE -> RTYPE & RTYPE
+	| ContractAnnot RTYPE -> RTYPE & RTYPE TVARS
+	| Measure VAR : SORT -> SORT where pattern = EXP | PATTERN = EXP
+RTYPE ::= { STACK | EXP } # この|、間違えられないか？
+TVARS ::= (VAR : SORT, VAR : SORT, ...)
+VAR ::= [a-z][a-z A-Z 0-9 _ ']*
+STACK ::= 
+	| PATTERN
+	| PATTERN : STACK
+EXP ::=
+	| EXP OP EXP
+	| UOP EXP
+	| EXP EXP
+	| NUMBER
+	| STRING
+	| BYTES
+	| Key STRING
+	| Key BYTES
+	| Address STRING
+	| Address BYTES
+	| Signature STRING
+	| Signature BYTES
+	| Timestamp STRING
+	| (EXP)
+	| EXP.ACCESSER
+	| if EXP then EXP else EXP
+	| CONSTRUCTOR
+	| EXP, EXP
+	| []
+	| EXP :: EXP
+	| [EXP; EXP; ...]
+	| match EXP with PATTERNS
+OP ::= + | - | * | / | < | > | <= | >= | = | <> | && | || | mod | :: | ^
+UOP ::= - | !
+ACCESSER ::= first | second
+PATTERNS ::= | PATTERN -> EXP
+PATTERN ::=
+	| CONSTRUCTOR VAR VAR ...
+	| CONSTRUCTOR <SORT> VAR VAR ...
+	| PATTERN, PATTERN
+	| VAR
+	| PATTERN :: PATTERN
+	| []
+	| [PATTERN; PATTERN; ...]
+	| _
+SORT ::=
+	| int | unit | nat | mutez | timestamp | bool | string
+	| bytes | key | address | signature | operation
+	| pair SORT SORT | list SORT | (SORT)
+	| contract SORT | option SORT | or SORT SORT | fun SORT SORT
+	| map SORT SORT | set SORT SORT
+```
+
+SORTはほぼMichelsonのtypeと同じですが、key_hashはaddressに統合されている点、lambda が fun になっている点が異なります
+(これ割とすぐに修正可能だしMichelsonのtypeと同じにしてしまった方が良いかも)
+
+### Constructors
+EXPとしてコンストラクタを使う場合は型推論によってつける必要がないが、パターン内でコンストラクタを使う場合は、<ty>をつけないといけない場合があります
+
+- `Nil` : list 'a
+- `Cons` : 'a -> list 'a -> list 'a
+- `Left` : 'a -> or 'a 'b
+- `Right` : 'a -> or 'b 'a
+- `Some` : 'a -> option 'a
+- `None` : option 'a
+- `True` : bool
+- `False` : bool
+- `Unit` : unit
+- `Pack` <ty> : ty -> bytes
+    - `PACK`, `UNPACK`命令に相当しますが、型情報が必要な都合上コンストラクタとして表現しています
+- `Contract` <ty> : address -> contract ty
+- `SetDelegate` : option key -> operation
+- `TransferTokens` <ty> : ty -> mutez -> contract ty -> operation
+- `CreateContract` <ty> : option address -> mutez -> ty -> address -> operation
+    - `CreateContract ka tz stor addr`は、スタックが`ka : tz : stor : S`の状態で `CREATE_CONTRACT`を実行して`addr : op : S`の状態になったときのopを表します
+    
+- `Error` <ty> : ty -> string
+    - FAILWITH例外を表します
+- `Overflow` : string
+    - mutezの乗算など、オーバーフローした場合に送出される例外を表します
+
+### Built-in Instructions
+全部説明書くんかな...
+- `not` : bool -> bool
+- `get_str` : string -> int -> string
+    - `get_str s i`で s の i 文字目を取得し、1文字のstringとして返します
+- `sub_str` : string -> int -> int -> string
+    - `sub_str s i l` で s の i 文字目から l 文字をとった部分文字列を返します
+- `len_str` : string -> int
+    - 文字列の長さを返します
+- `concat_str` : string -> string -> string
+    - 文字列を結合します `^`演算子と同じです
+- `get_bytes` : bytes -> int -> bytes
+- `sub_bytes` : bytes -> int -> int -> bytes
+- `len_bytes` : bytes -> int
+- `concat_bytes` : bytes -> bytes -> bytes
+    - バイト列を結合します
+- `first` : pair 'a 'b -> 'a
+- `second` : pair 'a 'b -> 'b
+- `find_opt` : 'a -> map 'a 'b -> option 'b
+    - `find_opt k m`でm中からkで索引し、値`v`が存在すれば`Some v`、なければ`None`を返します
+- `update` : 'a -> option 'b -> map 'a 'b -> map 'a 'b
+    - `update k (Some v) m`とするとmのキーkに結びつく値をvで更新し、`update k None m`とすると削除します
+- `empty_map` : map 'a 'b
+- `mem` : 'a -> set 'a -> bool
+- `add` : 'a -> set 'a -> set 'a
+- `remove` : 'a -> set 'a -> set 'a
+- `empty_set` : set 'a
+- `source` : address
+    - `SOURCE`命令で取得できる値です
+- `sender` : address
+    - `SENDER`命令で取得できる値です
+- `self` : contract parameter_ty
+    - `SELF`命令で取得できる値です
+- `now` : timestamp
+    - `NOW`命令で取得できる値です
+- `balance` : mutez
+    - `BALANCE`命令で取得できる値です
+- `amount` : mutez
+    - `AMOUNT`命令で取得できる値です
+- `call` : fun 'a 'b -> 'a -> 'b -> bool
+    - `call f a b`は、引数aにLAMBDAによって作られた関数fを適用すると停止し、返り値bとなるならばTrue、そうでなければFalseを表す関数です
+- `hash` : key -> address
+    - `HASH`命令に相当する関数です
+- `blake2b` : bytes -> bytes
+    - `BLAKE2B`命令に相当する関数です
+- `sha256` : bytes -> bytes
+    - `SHA256`命令に相当する関数です
+- `sha512` : bytes -> bytes
+    - `SHA512`命令に相当する関数です
+- `sig` : key -> signature -> bytes -> bool
+    - `CHECK_SIGNATURE`命令に相当する関数です
