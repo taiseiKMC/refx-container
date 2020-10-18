@@ -1,27 +1,35 @@
 # Helmholtz
 
-Helmholtz is a static verification tool for Michelson, a smart contract language used in Tezos blockchain protocol.
+Helmholtz is a static verification tool for [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html), a smart contract language used in [Tezos](https://tezos.gitlab.io/) blockchain protocol.  It verifies that a Michelson program satisfies a user-written formal specification.
 
-## Install
-tacas用
-There are two files below in the given zip.
-- dockerのdebパッケージ
-- コンテナのimgファイル
+## Quickstart
 
-```あとでちゃんとコマンドを書き下す
+> [name=ksuenaga]インストールしてサンプルのコントラクトを実行するためのコマンド列を書く．
+
+## How to install (for TACAS 2021 AEC)
+> [name=hsaito]tacas用
+
+The following two files are in the submitted zip file.
+- .deb package to install docker.
+- .img file of the image of a Docker container of the artifact.
+
+To install the artifact on the VM, execute the following commands:
+
+> [name=hsaito]あとでちゃんとコマンドを書き下す
+```
 % unzip helmholtz.zip                 # Extract the zip
 % dpkg -i docker.deb                  # Install docker
 % docker load --input helmholtz.img   # Load the container
 ```
 
-## Execute
-- `% docker run -it helmholtz bash`
-とすると、Helmholtzが実行可能な環境が立ち上がりbashが起動します
-    - ローカルにあるファイルをコンテナ内で利用するために、通常は `docker run -it -v <path>:/home/opam/tezos helmholtz bash` とするでしょう
-    - コンテナ内では tezos の sandbox 環境が立ち上がっています
-- `% tezos-client refinement <src>` で、注釈付きのプログラム(ファイル or 文字列)を与えると、注釈中の条件を検証して出力します
-- その他 tezos-client のサブコマンドは全て利用できます [Ref : Tezos Whitedoc](https://tezos.gitlab.io/api/cli-commands.html?highlight=tezos%20client)
-    - tezosのバージョンは `005_PsBabyM1 Babylon` です
+## How to run the artifact
+- `docker run -it helmholtz bash` will run `bash` running in an environment that can execute Helmholtz.
+    - To run a directory in the host, run `docker run -it -v <path-in-the-host>:/home/opam/tezos helmholtz bash`
+    - Tezos should be running in a sandbox inside the container.
+- To verify an annotated Michelson program `src.tz`, run `tezos-client refinement src.tz`.  You can write a program dirctly as a string instead of the file name `src.tz`.
+    - Annotations are to give a formal specification (i.e., an intended behavior) and hints (e.g., a loop invariant) to a Michelson program.  See below for a detail.
+- You can execute any subcommand of `tezos-client` (cf., [Tezos Whitedoc](https://tezos.gitlab.io/api/cli-commands.html?highlight=tezos%20client))
+    - The version of the tezos running in the container is `005_PsBabyM1 Babylon`.
 
 ##### 多分書かない情報
 - `% docker run -it helmholtz <command>`とすると、sandboxed-node を立ち上げる処理をしたのち command を実行します
@@ -32,8 +40,15 @@ There are two files below in the given zip.
   << ContractAnnot ...'
 ```
 
-## Spec
-とりあえず思いついたことを書いてます
+## Example: Boomerang
+
+- Helmholtz is a tool that verifies that a Michelson contract satisfies a specification.  
+
+> [name=ksuenaga] 論文で書いた Boomerang の例を使ってどんな感じで annotated contract を書くのか説明しよう．
+> [name=hsaito] 例は最後にまとめて置いているんですが、詳しい説明の前に例があった方がいいですか？
+
+## Annotations
+> [name=hsaito]とりあえず思いついたことを書いてます
 
 - ツールに投げるソースコードは言語 [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html) で記述されたプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードである必要があります
 
@@ -43,30 +58,9 @@ There are two files below in the given zip.
     - 生成された条件式は`.refx/out.smt2`か、`-l`オプションで指定したディレクトリで確認できます
 - 最後に生成された条件式を `z3` で検証し、その出力をもとに検証器は`VERIFIED`か`UNVERIFIED`を出力します
 
-### Annotation
-注釈は次の6種類です
-- `ContractAnnot`
-    - プログラム全体の事前、事後条件、例外の値の条件及び環境変数を与えます
-    - `code`の直前に書かなければなりません
-- `LambdaAnnot`
-    - `LAMBDA`命令で与える命令列を実行する際の事前、事後条件、例外の値の条件及びLAMBDA内で使える環境変数を与えます
-    - `LAMBDA`命令の直前に書かなければなりません
-- `Assert`
-    - `Assert`を書いた地点までプログラムを実行した際に、与える条件を満たしているか確認します
-    - 命令列中の間に書くことができます
-- `Assume`
-    - 書いた地点以降で与えた条件を仮定します
-    - 命令列中の間に書くことができます
-- `LoopInv`
-    - ループ不変条件を指定します
-    - **ループ以前に仮定された条件は、`LoopInv`に記述したこと以外は全てなくなります**
-    - `LOOP`, `ITER`の直前に書かなければなりません
-        - `MAP`, `LOOP_LEFT` are not yet supported
-- `Measure`
-    - list, set, map の仕様をある程度記述できるようにするための機能です
-    - `ContractAnnot`の前に書いてください
 
 ### Syntax
+> [name=hsaito] `|`、bnfの区切りと構文上の記号の両方で使ってしまう
 ```
 ANNOTATION ::=
 	| Assert RTYPE
@@ -79,7 +73,7 @@ ANNOTATION ::=
 	| Measure VAR : SORT -> SORT where [] = EXP | VAR :: VAR = EXP	
 	| Measure VAR : SORT -> SORT where EmptySet = EXP | Add e s = EXP
 	| Measure VAR : SORT -> SORT where EmptyMap = EXP | Bind k v m = EXP
-RTYPE ::= { STACK | EXP } # この|、間違えられないか？
+RTYPE ::= { STACK | EXP }
 TVARS ::= (VAR : SORT, VAR : SORT, ...)
 VAR ::= [a-z][a-z A-Z 0-9 _ ']*
 STACK ::= 
@@ -123,14 +117,11 @@ PATTERN ::=
 	| _
 SORT ::=
 	| int | unit | nat | mutez | timestamp | bool | string
-	| bytes | key | address | signature | operation
+	| bytes | key | address | signature | key_hash | operation
 	| pair SORT SORT | list SORT | (SORT)
-	| contract SORT | option SORT | or SORT SORT | fun SORT SORT
+	| contract SORT | option SORT | or SORT SORT | lambda SORT SORT
 	| map SORT SORT | set SORT SORT
 ```
-
-SORTはほぼMichelsonのtypeと同じですが、key_hashはaddressに統合されている点、lambda が fun になっている点が異なります
-(これ割とすぐに修正可能だしMichelsonのtypeと同じにしてしまった方が良いかも)
 
 #### Constructors
 EXPとしてコンストラクタを使う場合は型推論によってつける必要がないが、パターン内でコンストラクタを使う場合は、<ty>をつけないといけない場合があります
@@ -141,6 +132,7 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
 - `Right` : 'a -> or 'b 'a
 - `Some` : 'a -> option 'a
 - `None` : option 'a
+- `Pair` : 'a -> 'b -> pair 'a 'b
 - `True` : bool
 - `False` : bool
 - `Unit` : unit
@@ -148,7 +140,7 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
     - `PACK`, `UNPACK`命令に相当しますが、型情報が必要な都合上コンストラクタとして表現しています
 - `Contract` <ty> : address -> contract ty
 - `SetDelegate` : option key -> operation
-- `TransferTokens` <ty> : ty -> mutez -> contract ty -> operation
+- `TransferTokens`(Transfer) <ty> : ty -> mutez -> contract ty -> operation
 - `CreateContract` <ty> : option address -> mutez -> ty -> address -> operation
     - `CreateContract ka tz stor addr`は、スタックが`ka : tz : stor : S`の状態で `CREATE_CONTRACT`を実行して`addr : op : S`の状態になったときのopを表します
     
@@ -158,7 +150,7 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
     - mutezの乗算など、オーバーフローした場合に送出される例外を表します
 
 #### Built-in Instructions
-全部説明書くんかな...
+> [name=hsaito]全部説明書くんかな...
 - `not` : bool -> bool
 - `get_str` : string -> int -> string
     - `get_str s i`で s の i 文字目を取得し、1文字のstringとして返します
@@ -209,14 +201,54 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
 - `sig` : key -> signature -> bytes -> bool
     - `CHECK_SIGNATURE`命令に相当する関数です
 
-#### Language Spec
-RTYPEのSTACKはどんなとかの話
+### Annotation
+各注釈中の篩型 `{ stack | exp }` は、プログラム中のスタックの状態と、スタックに対する条件式です。
+
+注釈は次の6種類です
+- `ContractAnnot rtype1 -> rtype2 & rtype3 vars`
+    - 事前条件を満たす状態でプログラムを実行して、正常終了すれば事後条件を満たし、例外が発生した場合は例外の値が条件を満たすことを確認します
+    - rtype1 はプログラム開始時のスタック(=`[pair parameter_ty storage_ty]`)に対する事前条件です
+    - rtype2 はプログラム終了時のスタック(=`[pair (list operation) storage_ty]`)に対する事後条件です
+    - rtype3 はプログラムが出しうる例外の値に対する条件です
+    - vars はプログラム中の注釈で使用できる変数の宣言です
+        - ContractAnnotの篩型中では使用できません
+    - `code`の直前に書かなければなりません
+- `LambdaAnnot rtype1 -> rtype2 & rtype3 tvars`
+    - 事前条件を満たす状態で関数を実行して、正常終了すれば事後条件を満たし、例外が発生した場合は例外の値が条件を満たすことを確認します
+    - rtype1 は関数の開始時のスタックに対する事前条件です
+    - rtype2 は関数の終了時のスタック(=`[pair (list operation) storage_ty]`)に対する事後条件です
+    - rtype3 は関数実行中に出うる例外の値に対する条件です
+    - vars は関数中の注釈で使用できる変数の宣言です
+        - LambdaAnnotの篩型中では使用できません
+    - `LAMBDA`命令の直前に書かなければなりません
+- `Assert rtype`
+    - `Assert`を書いた地点までプログラムを実行した際に、与える条件を満たしているか確認します
+    - rtype は注釈が書かれた時点でのスタックが満たすべき条件です
+    - 命令列中の間に書くことができます
+- `Assume rtype`
+    - 書いた地点以降で与えた条件を仮定します
+    - rtype は注釈が書かれた時点でのスタックが満たすと仮定する条件です
+    - 命令列中の間に書くことができます
+- `LoopInv rtype`
+    - ループ不変条件を指定します
+    - rtype は注釈のあるループの前後のスタックが満たすループ不変条件です
+    - **ループ以前に仮定された条件は、`LoopInv`に記述したこと以外は全てなくなります**
+    - `LOOP`, `ITER`の直前に書かなければなりません
+        - `MAP`, `LOOP_LEFT` are not yet supported
+- `Measure`
+    - list, set, map の仕様をある程度記述できるようにするための機能です
+    - `ContractAnnot`の前に書いてください
+
 
 #### Details
 - `Key`, `Address`, `Signature`はコンストラクタではありません これは`key`, `address`, `signature` の値をパターンによって分解したいことがないと考えられるからです
 - `Timestamp str`の str はRFC3339に沿った文字列である必要があります
--　現実装では `int` と `nat`, `mutez`, `timestamp`を型レベルで区別していません
-- 結合順序はocaml準拠です
+- 現実装では `int` と `nat`, `mutez`, `timestamp`を型レベルで区別していません
+- 結合順序はOCaml準拠です
+
+### Q&A
+- `misaligned expression`というエラーが出る
+    - これは Helmholtz のエラーではなく、Michelson のインデントチェックによるエラーです。インデントの規則については[こちら](https://tezos.gitlab.io/whitedoc/micheline.html)をご覧ください
 
 ## Examples
 
