@@ -66,22 +66,49 @@ To install the artifact on the VM, execute the following commands:
 ```
 
 ## Example: Boomerang
+```boomerang.tz
+{
+  parameter unit;
+  storage unit;
+  << ContractAnnot { arg | True } ->
+      { ops, _ | match ops with [TransferTokens<unit> Unit tz (Contract addr)] -> addr = source && tz = balance | _ -> False } &
+      { exc | False } >>
+  code  { CDR ;
+          NIL operation ;
+          SOURCE ;
+          CONTRACT unit ;
+          ASSERT_SOME ;
+          BALANCE ;
+          UNIT ;
+          TRANSFER_TOKENS ;
+          CONS ;
+          PAIR ;
+        }
+}
+```
+これは`source`へ`balance`を送るoperationを返すMichelsonのプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードです。
+ContractAnnotと書かれた注釈には、プログラムの終了状態のstackに積まれた値`(ops, _)`に対し、`ops = [TransferTokens Unit balance addr]`を満たすことが記述されています。
+プログラム中にはスタックトップが`None`のときに例外を送出する`ASSERT_SOME`がありますが、`source`のaddressが指すアカウントは人間の操作するアカウントであるはずなので、`CONTRACT unit`は必ず`Some`を返すはずで、例外になることはないはずです。ContractAnnotには`{ exc | False }`の部分で例外の値の条件がFalse、つまり例外が起きないことを記述しています。
+そしてこのソースコードに対して`tezos-client refinement boomerang.tz`を実行すると`VERIFIED`と出力されるでしょう
 
-- Helmholtz is a tool that verifies that a Michelson contract satisfies a specification.  
+> (DeepL翻訳) This is the code of Michelson's program that returns the operation to send balance to source, with annotations enclosed in << and >. The annotation labeled ContractAnnot states that ops = [TransferTokens Unit balance addr] is satisfied for the value (ops, _) stacked in the end state of the program's stack. There is an ASSERT_SOME in the program that sends out an exception when the stack top is None, but since the account pointed to by the address of source should be a human-operated account, the CONTRACT unit should always return Some, so it can't be an exception! ContractAnnot contains a section { exc | False } that states that the condition on the value of the exception is False, meaning that the exception does not occur. Then, if you run tezos-client refinement boomerang.tz against this source code, you will get VERIFIED
 
-> [name=ksuenaga] 論文で書いた Boomerang の例を使ってどんな感じで annotated contract を書くのか説明しよう．
-> [name=hsaito] 例は最後にまとめて置いているんですが、詳しい説明の前に例があった方がいいですか？
+## Experiment
 
-## Annotations
-> [name=hsaito]とりあえず思いついたことを書いてます
 
-- ツールに投げるソースコードは言語 [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html) で記述されたプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードである必要があります
 
-### Execution Flow
-- `tezos-client refinement <src>`はまずソースコードから`<<`と`>>`で囲まれた注釈を除去し、型チェック`tezos-client typecheck`を実行します
+## How it works
+
+<!-- - ツールに投げるソースコードは言語 [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html) で記述されたプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードである必要があります -->
+
+Helmholtz accepts a [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html) program annotaed with its formal specification and hints (e.g., loop invariants) used by Helmholtz.  An annotation is surrounded by `<<` and `>>`.
+
+Helmholtz works as follows.
+- If `tezos-client refinement <src>` is executed, Helmholtz strips the annotations surrounded by `<<` and `>>` and typechecks the stripped code using `tezos-client typecheck`; the simple type checking is conducted in this step.
 - 型チェックに成功したら、`tezos-client refinement`は注釈から条件式を生成します
     - 生成された条件式は`.refx/out.smt2`か、`-l`オプションで指定したディレクトリで確認できます
 - 最後に生成された条件式を `z3` で検証し、その出力をもとに検証器は`VERIFIED`か`UNVERIFIED`を出力します
+
 
 
 ### Syntax
@@ -278,33 +305,6 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
     - これは Helmholtz のエラーではなく、Michelson のインデントチェックによるエラーです。インデントの規則については[こちら](https://tezos.gitlab.io/whitedoc/micheline.html)をご覧ください
 
 ## Examples
-
-### Boomerang.tz
-```boomerang.tz
-{
-  parameter unit;
-  storage unit;
-  << ContractAnnot { arg | True } ->
-      { ops, _ | match ops with [TransferTokens<unit> Unit tz (Contract addr)] -> addr = source && tz = balance | _ -> False } &
-      { exc | False } >>
-  code  { CDR ;
-          NIL operation ;
-          SOURCE ;
-          CONTRACT unit ;
-          ASSERT_SOME ;
-          BALANCE ;
-          UNIT ;
-          TRANSFER_TOKENS ;
-          CONS ;
-          PAIR ;
-        }
-}
-```
-これは`source`へ`balance`を送るoperationを返すプログラムです。
-ContractAnnotには、事前条件は何も仮定せず、事後条件にはその返り値が上で述べた仕様を満たすことを記述しています。
-プログラム中にはスタックトップが`None`のときに例外を送出する`ASSERT_SOME`がありますが、ContractAnnotには例外の値の条件がFalse、つまり例外が起きないことを記述しています。実際`source`のaddressが指すアカウントは人間の操作するアカウントであるはずなので、`CONTRACT unit`は必ず成功するはずです。
-そしてこのソースコードに対して`tezos-client refinement boomerang.tz`を実行すると`VERIFIED`と出力されるでしょう
-
 ### checksig.tz
 ```
 parameter (pair signature string);
@@ -338,6 +338,8 @@ code  { DUP; DUP; DUP;
 このプログラムでは`ASSERT`, `PUSH int 0; FAILWITH`の二箇所からそれぞれ`Error Unit`, `Error 0`の例外が送出され得ます。ContractAnnotでは、この2つの例外が起こりうることを記述しています。
 この例では例外が起こりうることを許容することで事後条件にはより強い主張ができています。上のプログラムでは引数のsignatureの検証、storage上のaddressの指すコントラクトの引数型チェックをしており、それぞれ失敗すると上記の例外が出るわけですが、このプログラムが正常終了した場合はどちらもうまくいっているはずであり、事後条件にはそのことが記述されています。
 
+> (DeepL翻訳) The program can raise exceptions to Error Unit and Error 0 in two places: ASSERT, PUSH int 0; FAILWITH, respectively. In this example, allowing exceptions to occur makes a stronger argument for a posterior condition. In the above program, the signature of the argument and the argument type check of the contract pointing to the address in storage are both checked, and if both of them fail, the above exception is raised. It is described as.
+
 ### sumseq.tz
 ```
 { parameter (list int);
@@ -361,3 +363,5 @@ code  { DUP; DUP; DUP;
 次に Assume によってその時点での stack の値を環境変数`l`に結びつけています。この`l`は ContractAnnot の末尾で定義されたものです。
 そして LoopInv によって ITER 中でのループ不変条件を与えます。`ITER { ADD }`は、list の先頭をスタックの先頭から2番目`s`に全て足す命令です。ループ不変条件`s + sumseq r = sumseq l`は、処理中のリスト`r`の総和に`s`を足すと、最初のリスト`l`の総和と等しくなるということが表現されています。
 LoopInvを減るとそれまでの仮定が失われてしまうので、Assumeで書いた条件は忘れられています。なので`l = first arg`をループ不変条件に追加して、`l`の値の条件が忘れられないようにしています。
+
+> (DeepL翻訳) This example is an introduction to the environment variables, Assume, LoopInv and Measure. The program first defines the value of all the elements of list int added together by Measure at the beginning. Next, Assume connects the value of the stack at that point to the environment variable l, which is the end of ContractAnnot. This l is defined at the end of ContractAnnot. LoopInv gives the loop-invariant condition in ITER: ITER { ADD } is an instruction that adds the head of the list to the second s from the top of the stack. The loop-invariant condition s + sumseq r = sumseq l expresses that adding s to the sum of list r in process equals the sum of the first list l. The condition written in Assume is forgotten, as reducing LoopInv causes the previous assumption to be lost. So I add l = first arg to the loop-invariant condition so that the condition for l's value is not forgotten.
