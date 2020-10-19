@@ -21,28 +21,35 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 Helmholtz is a static verification tool for [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html), a smart contract language used in [Tezos](https://tezos.gitlab.io/) blockchain protocol.  It verifies that a Michelson program satisfies a user-written formal specification.
 
 ## Quickstart
-
-> [name=ksuenaga]インストールしてサンプルのコントラクトを実行するためのコマンド列を書く．
+When `src.tz` is in <path-in-the-host> directory,
+```
+% unzip helmholtz.zip
+% tar zxvf helmholtz/docker-19.03.9.tgz
+% export PATH="$PATH:/home/$USER/docker"
+% sudo dockerd &
+% sudo docker load --input helmholtz/helmholtz.img
+% sudo docker run -it helmholtz -v <path-in-the-host>:/home/opam/ReFX/mount tezos-client refinement mount/src.tz
+```
 
 ## How to install (for TACAS 2021 AEC)
-> [name=hsaito]tacas用
 
 The following two files are in the submitted zip file.
-- .deb package to install docker.
+- .tgz package to install docker.
 - .img file of the image of a Docker container of the artifact.
 
 To install the artifact on the VM, execute the following commands:
 
-> [name=hsaito]あとでちゃんとコマンドを書き下す
 ```
-% unzip helmholtz.zip                 # Extract the zip
-% dpkg -i docker.deb                  # Install docker
-% docker load --input helmholtz.img   # Load the container
+% unzip helmholtz.zip                               # Extract the zip
+% tar zxvf helmholtz/docker-19.03.9.tgz
+% export PATH="$PATH:/home/$USER/docker"
+% sudo dockerd &                                    # Run docker daemon
+% sudo docker load --input helmholtz/helmholtz.img  # Load the container
 ```
 
 ## How to run the artifact
-- `docker run -it helmholtz bash` will run `bash` running in an environment that can execute Helmholtz.
-    - To run a directory in the host, run `docker run -it -v <path-in-the-host>:/home/opam/tezos helmholtz bash`
+- `sudo docker run -it helmholtz bash` will run `bash` running in an environment that can execute Helmholtz.
+    - To run a directory in the host, run `docker run -it -v <path-in-the-host>:/home/opam/ReFX/mount helmholtz bash`
     - Tezos should be running in a sandbox inside the container.
 - To verify an annotated Michelson program `src.tz`, run `tezos-client refinement src.tz`.  You can write a program dirctly as a string instead of the file name `src.tz`.
     - Annotations are to give a formal specification (i.e., an intended behavior) and hints (e.g., a loop invariant) to a Michelson program.  See below for a detail.
@@ -116,6 +123,7 @@ EXP ::=
 	| if EXP then EXP else EXP
 	| CONSTRUCTOR
 	| EXP, EXP
+    | EXP : SORT
 	| []
 	| EXP :: EXP
 	| [EXP; EXP; ...]
@@ -139,6 +147,7 @@ SORT ::=
 	| pair SORT SORT | list SORT | (SORT)
 	| contract SORT | option SORT | or SORT SORT | lambda SORT SORT
 	| map SORT SORT | set SORT SORT
+	| exception
 ```
 
 #### Constructors
@@ -162,9 +171,9 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
 - `CreateContract` <ty> : option address -> mutez -> ty -> address -> operation
     - `CreateContract ka tz stor addr`は、スタックが`ka : tz : stor : S`の状態で `CREATE_CONTRACT`を実行して`addr : op : S`の状態になったときのopを表します
     
-- `Error` <ty> : ty -> string
+- `Error` <ty> : ty -> exception
     - FAILWITH例外を表します
-- `Overflow` : string
+- `Overflow` : exception
     - mutezの乗算など、オーバーフローした場合に送出される例外を表します
 
 #### Built-in Instructions
