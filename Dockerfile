@@ -16,8 +16,11 @@ RUN git checkout origin/refx
 RUN opam init --bare
 RUN make build-deps
 RUN eval $(opam env)
+ARG COMMIT_HASH="157824a49a65854c8818a8fea592624c374dbdc8"
 ENV PATH $PATH:/home/opam/tezos/_opam/bin:/home/opam/.opam/4.07.1/bin
+RUN git fetch && git checkout origin/hsaito/new_lang
 RUN make
+ENV TEZOS_CLIENT_UNSAFE_DISABLE_DISCLAIMER "Y"
 
 RUN opam clean -a
 RUN rm -rf _opam/
