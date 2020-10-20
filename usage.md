@@ -117,10 +117,10 @@ To install the artifact on the VM, execute the following commands:
         }
 }
 ```
-This code is a Michelson's program that returns a single operation to send `balance` to `source`, with annotations enclosed in `<<` and `>>`.
+This code is a Michelson's program that returns a single operation to send `balance` to `source`, with annotations surrounded by `<<` and `>>`.
 The annotation labeled ContractAnnot states two property.
-First, the value `(ops, _)` stacked in the end state of the program's stack satisfies `ops = [TransferTokens Unit balance addr]`.
-Second, . There is an `ASSERT_SOME` instruction in the program that sends out an exception when the stack top is `None`, but since the account pointed to by the address of `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so it can't be an exception. ContractAnnot contains a section `{ exc | False }` that states that the condition on the value of the exception is False, meaning that the exception does not occur. Then, if you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`
+First, the value `(ops, _)` stacked in the end of this program satisfies `ops = [TransferTokens Unit balance addr]`.
+Second, no exceptions are raised from the instructions in this program. There is an `ASSERT_SOME` instruction in the program that sends out an exception when the stack top is `None`, but since the account pointed to by  `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so it can't be an exception. The section `{ exc | False }` ContractAnnot contains states that the condition on the value of the exception is False, meaning that the exception does not occur. Then, if you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`.
 
 <!--
 これは`source`へ`balance`を送るoperationを返すMichelsonのプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードです。
@@ -137,14 +137,13 @@ Helmholtz accepts a [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html)
 
 Helmholtz works as follows.
 - If `tezos-client refinement <src>` is executed, Helmholtz strips the annotations surrounded by `<<` and `>>` and typechecks the stripped code using `tezos-client typecheck`; the simple type checking is conducted in this step.
-- 型チェックに成功したら、`tezos-client refinement`は注釈から条件式を生成します
-    - 生成された条件式は`.refx/out.smt2`か、`-l`オプションで指定したディレクトリで確認できます
-- 最後に生成された条件式を `z3` で検証し、その出力をもとに検証器は`VERIFIED`か`UNVERIFIED`を出力します
+- After typechecking, `tezos-client refinement` generates verification conditions from annotations users give
+    - Generated verification conditions can be shown in `.refx/out.smt2` or the directory given by `-l` option.
+- At last, Helmholtz discharges the conditions with `z3` and outputs `VERIFIED` or `UNVERIFIED`.
 
 
-
+## Spec of Assertion Language
 ### Syntax
-> [name=hsaito] `|`、bnfの区切りと構文上の記号の両方で使ってしまう
 ```
 ANNOTATION ::=
 	| Assert RTYPE
@@ -187,9 +186,28 @@ EXP ::=
 	| EXP :: EXP
 	| [EXP; EXP; ...]
 	| match EXP with PATTERNS
-OP ::= + | - | * | / | < | > | <= | >= | = | <> | && | || | mod | :: | ^
-UOP ::= - | !
-ACCESSER ::= first | second
+OP ::= 
+	| +
+	| -
+	| *
+	| /
+	| <
+	| >
+	| <=
+	| >=
+	| =
+	| <>
+	| &&
+	| ||
+	| mod
+	| ::
+	| ^
+UOP ::=
+	| - 
+	| !
+ACCESSER ::=
+	| first
+	| second
 PATTERNS ::= | PATTERN -> EXP
 PATTERN ::=
 	| CONSTRUCTOR VAR VAR ...
@@ -201,16 +219,33 @@ PATTERN ::=
 	| [PATTERN; PATTERN; ...]
 	| _
 SORT ::=
-	| int | unit | nat | mutez | timestamp | bool | string
-	| bytes | key | address | signature | key_hash | operation
-	| pair SORT SORT | list SORT | (SORT)
-	| contract SORT | option SORT | or SORT SORT | lambda SORT SORT
-	| map SORT SORT | set SORT SORT
+	| (SORT)
+	| int
+	| unit
+	| nat 
+	| mutez 
+	| timestamp 
+	| bool 
+	| string
+	| bytes 
+	| key 
+	| address 
+	| signature 
+	| key_hash 
+	| operation
+	| pair SORT SORT 
+	| list SORT 
+	| contract SORT 
+	| option SORT 
+	| or SORT SORT 
+	| map SORT SORT 
+	| set SORT SORT
+	| lambda SORT SORT
 	| exception
 ```
 
 #### Constructors
-EXPとしてコンストラクタを使う場合は型推論によってつける必要がないが、パターン内でコンストラクタを使う場合は、<ty>をつけないといけない場合があります
+Some constructors in patterns need a type parameter `<ty>`. On the other hand, constructors in exp should not have `<ty>` (`ty` will be infered).
 
 - `Nil` : list 'a
 - `Cons` : 'a -> list 'a -> list 'a
@@ -223,17 +258,17 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
 - `False` : bool
 - `Unit` : unit
 - `Pack` <ty> : ty -> bytes
-    - `PACK`, `UNPACK`命令に相当しますが、型情報が必要な都合上コンストラクタとして表現しています
+    - It corresponds to `PACK`, `UNPACK` in Michelson. It is expressed by a constructor because it needs type information.
 - `Contract` <ty> : address -> contract ty
 - `SetDelegate` : option key -> operation
 - `TransferTokens`(Transfer) <ty> : ty -> mutez -> contract ty -> operation
 - `CreateContract` <ty> : option address -> mutez -> ty -> address -> operation
-    - `CreateContract ka tz stor addr`は、スタックが`ka : tz : stor : S`の状態で `CREATE_CONTRACT`を実行して`addr : op : S`の状態になったときのopを表します
+    - `CreateContract ka tz stor addr` means a operation if the stack is `ka : tz : stor : S` , `CREATE_CONTRACT` is executed, and transition to `addr : op : S`
     
 - `Error` <ty> : ty -> exception
-    - FAILWITH例外を表します
+    - Exceptions raised by `FAILWITH` instruction
 - `Overflow` : exception
-    - mutezの乗算など、オーバーフローした場合に送出される例外を表します
+    - Overflow exception such as multiplications of mutez.
 
 #### Built-in Instructions
 > [name=hsaito]全部説明書くんかな...
@@ -288,53 +323,51 @@ EXPとしてコンストラクタを使う場合は型推論によってつけ�
     - `CHECK_SIGNATURE`命令に相当する関数です
 
 ### Annotation
-各注釈中の篩型 `{ stack | exp }` は、プログラム中のスタックの状態と、スタックに対する条件式です。
+A refinement type in the form of `{ stack | exp }` in annotations is a pair of a stack in the program and a verification condition for this stack.
 
-注釈は次の6種類です
+There are 6 types of annotations below.
 - `ContractAnnot rtype1 -> rtype2 & rtype3 vars`
-    - 事前条件を満たす状態でプログラムを実行して、正常終了すれば事後条件を満たし、例外が発生した場合は例外の値が条件を満たすことを確認します
-    - rtype1 はプログラム開始時のスタック(=`[pair parameter_ty storage_ty]`)に対する事前条件です
-    - rtype2 はプログラム終了時のスタック(=`[pair (list operation) storage_ty]`)に対する事後条件です
-    - rtype3 はプログラムが出しうる例外の値に対する条件です
-    - vars はプログラム中の注釈で使用できる変数の宣言です
-        - ContractAnnotの篩型中では使用できません
-    - `code`の直前に書かなければなりません
+    - Execute the program with the pre-condition `rtype1`, and if it ends successfully, the post-condition `rtype2` is satisfied, and if an exception is raised, make sure the exception value satisfies `rtype3`.
+    - `rtype1` is a pre-condition for the stack (=`[pair parameter_ty storage_ty]`) when the program starts.
+    - `rtype2` is a post-condition for the stack (=`[pair (list operation) storage_ty]`) when the program ends.
+    - `rtype3` is a refinement type for the value the exception the program may throw has.
+    - It is possible to declare some variables in `vars` that can be used in annotation inside the program.
+        - Can not use these in the `rtype1`, `rtype2`, and `rtype3`.
+    - A `ContractAnnot` annotation Must be written just before `code`
 - `LambdaAnnot rtype1 -> rtype2 & rtype3 tvars`
-    - 事前条件を満たす状態で関数を実行して、正常終了すれば事後条件を満たし、例外が発生した場合は例外の値が条件を満たすことを確認します
-    - rtype1 は関数の開始時のスタックに対する事前条件です
-    - rtype2 は関数の終了時のスタック(=`[pair (list operation) storage_ty]`)に対する事後条件です
-    - rtype3 は関数実行中に出うる例外の値に対する条件です
-    - vars は関数中の注釈で使用できる変数の宣言です
-        - LambdaAnnotの篩型中では使用できません
-    - `LAMBDA`命令の直前に書かなければなりません
+    - Execute the function stacked by `LAMBDA` with the pre-condition `rtype1`, and if it ends successfully, the post-condition `rtype2` is satisfied, and if an exception is raised, make sure the exception value satisfies `rtype3`.
+    - `rtype1` is a pre-condition for the stack (=`[pair parameter_ty storage_ty]`) when the function starts.
+    - `rtype2` is a post-condition for the stack (=`[pair (list operation) storage_ty]`) when the function ends.
+    - `rtype3` is a refinement type for the value the exception the function may throw has.
+    - It is possible to declare some variables in `vars` that can be used in annotation inside the function.
+        - Can not use these in the `rtype1`, `rtype2`, and `rtype3`.
+    - A `ContractAnnot` annotation Must be written just before `LAMBDA`.
 - `Assert rtype`
-    - `Assert`を書いた地点までプログラムを実行した際に、与える条件を満たしているか確認します
-    - rtype は注釈が書かれた時点でのスタックが満たすべき条件です
-    - 命令列中の間に書くことができます
+    - It checks the stack at the point where  `Assert` is wrriten satisfies the verification condition given by `rtype`.
+    - It is possible to place between any two instructions.
 - `Assume rtype`
-    - 書いた地点以降で与えた条件を仮定します
-    - rtype は注釈が書かれた時点でのスタックが満たすと仮定する条件です
-    - 命令列中の間に書くことができます
+    - It give the assumption for the stack by `rtype`.
+    - It is possible to place between any two instructions.
 - `LoopInv rtype`
-    - ループ不変条件を指定します
-    - rtype は注釈のあるループの前後のスタックが満たすループ不変条件です
-    - **ループ以前に仮定された条件は、`LoopInv`に記述したこと以外は全てなくなります**
-    - `LOOP`, `ITER`の直前に書かなければなりません
+    - It give a loop invariant by `rtype`
+    - It checks the stack before and after the loop satisfies the verification condition.
+    - **All the conditions assumed before the loop are gone after the loop, except those described in `LoopInv`.**
+    - A `LoopInv` annotation Must be written just before `LOOP`, `ITER`
         - `MAP`, `LOOP_LEFT` are not yet supported
 - `Measure`
-    - list, set, map の仕様をある程度記述できるようにするための機能です
-    - `ContractAnnot`の前に書いてください
+    - A feature to give some specification of list, set and map
+    - If you want, `Measure` annotations should be written  before `ContractAnnot`
 
 
 #### Details
-- `Key`, `Address`, `Signature`はコンストラクタではありません これは`key`, `address`, `signature` の値をパターンによって分解したいことがないと考えられるからです
-- `Timestamp str`の str はRFC3339に沿った文字列である必要があります
-- 現実装では `int` と `nat`, `mutez`, `timestamp`を型レベルで区別していません
-- 結合順序はOCaml準拠です
+- `Key`, `Address`, `Signature` are not defined as constructors. This is because we don't want to deconstruct the `key`, `address`, and `signature` values into a string or bytes.
+- The `str` in `Timestamp str` accepts an RFC3339-compliant string.
+- The current annotation language does not distinguish between `int` and `nat`, `mutez`, and `timestamp` at the type level.
+- Operator precedence is OCaml compliant.
 
 ### Q&A
-- `misaligned expression`というエラーが出る
-    - これは Helmholtz のエラーではなく、Michelson のインデントチェックによるエラーです。インデントの規則については[こちら](https://tezos.gitlab.io/whitedoc/micheline.html)をご覧ください
+- Error `misaligned expression` is output
+    - It is not an error output by Helmholtz, but an error by indent-check by Michelson `tezos-client typecheck`. For the rules of indentation, see [here](https://tezos.gitlab.io/whitedoc/micheline.html).
 
 ## Examples
 ### checksig.tz
@@ -367,10 +400,12 @@ code  { DUP; DUP; DUP;
         PAIR };
 ```
 
+The program can raise exceptions to Error Unit and Error 0 in two places: ASSERT, PUSH int 0; FAILWITH, respectively. In this example, allowing exceptions to occur makes a stronger argument for a posterior condition. In the above program, the signature of the argument and the argument type check of the contract pointing to the address in storage are both checked, and if both of them fail, the above exception is raised. It is described as.
+
+<!--
 このプログラムでは`ASSERT`, `PUSH int 0; FAILWITH`の二箇所からそれぞれ`Error Unit`, `Error 0`の例外が送出され得ます。ContractAnnotでは、この2つの例外が起こりうることを記述しています。
 この例では例外が起こりうることを許容することで事後条件にはより強い主張ができています。上のプログラムでは引数のsignatureの検証、storage上のaddressの指すコントラクトの引数型チェックをしており、それぞれ失敗すると上記の例外が出るわけですが、このプログラムが正常終了した場合はどちらもうまくいっているはずであり、事後条件にはそのことが記述されています。
-
-> (DeepL翻訳) The program can raise exceptions to Error Unit and Error 0 in two places: ASSERT, PUSH int 0; FAILWITH, respectively. In this example, allowing exceptions to occur makes a stronger argument for a posterior condition. In the above program, the signature of the argument and the argument type check of the contract pointing to the address in storage are both checked, and if both of them fail, the above exception is raised. It is described as.
+-->
 
 ### sumseq.tz
 ```
@@ -390,10 +425,12 @@ code  { DUP; DUP; DUP;
        }
 }
 ```
+This example is an introduction to the environment variables, Assume, LoopInv and Measure. The program first defines the value of all the elements of list int added together by Measure at the beginning. Next, Assume connects the value of the stack at that point to the environment variable l, which is the end of ContractAnnot. This l is defined at the end of ContractAnnot. LoopInv gives the loop-invariant condition in ITER: ITER { ADD } is an instruction that adds the head of the list to the second s from the top of the stack. The loop-invariant condition s + sumseq r = sumseq l expresses that adding s to the sum of list r in process equals the sum of the first list l. The condition written in Assume is forgotten, as reducing LoopInv causes the previous assumption to be lost. So I add l = first arg to the loop-invariant condition so that the condition for l's value is not forgotten.
+
+<!--
 この例は環境変数, Assume, LoopInv, Measureの紹介です。
 このプログラムは、まず先頭で list int の要素を全て足した値を Measure によって定義しています。
 次に Assume によってその時点での stack の値を環境変数`l`に結びつけています。この`l`は ContractAnnot の末尾で定義されたものです。
 そして LoopInv によって ITER 中でのループ不変条件を与えます。`ITER { ADD }`は、list の先頭をスタックの先頭から2番目`s`に全て足す命令です。ループ不変条件`s + sumseq r = sumseq l`は、処理中のリスト`r`の総和に`s`を足すと、最初のリスト`l`の総和と等しくなるということが表現されています。
 LoopInvを減るとそれまでの仮定が失われてしまうので、Assumeで書いた条件は忘れられています。なので`l = first arg`をループ不変条件に追加して、`l`の値の条件が忘れられないようにしています。
-
-> (DeepL翻訳) This example is an introduction to the environment variables, Assume, LoopInv and Measure. The program first defines the value of all the elements of list int added together by Measure at the beginning. Next, Assume connects the value of the stack at that point to the environment variable l, which is the end of ContractAnnot. This l is defined at the end of ContractAnnot. LoopInv gives the loop-invariant condition in ITER: ITER { ADD } is an instruction that adds the head of the list to the second s from the top of the stack. The loop-invariant condition s + sumseq r = sumseq l expresses that adding s to the sum of list r in process equals the sum of the first list l. The condition written in Assume is forgotten, as reducing LoopInv causes the previous assumption to be lost. So I add l = first arg to the loop-invariant condition so that the condition for l's value is not forgotten.
+-->
