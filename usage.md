@@ -127,9 +127,9 @@ To install the artifact on the VM, execute the following commands:
         }
 }
 ```
-This code is a Michelson's program that returns a single operation to send `balance` to `source`, with annotations surrounded by `<<` and `>>`.
-The annotation labeled ContractAnnot states two property.
-First, the value `(ops, _)` stacked in the end of this program satisfies `ops = [TransferTokens Unit balance addr]`.
+The above code, which is the contents of `boomerang.tz` in the container, is a Michelson program that transfers money amout `balance` to an account `source`.  The program comes with an annotation surrounded by `<<` and `>>`.  
+This annotation, which is labeled by a constructor `ContractAnnot`, states the following two properties.
++ The value `(ops, _)` stacked in the end of this program satisfies `ops = [TransferTokens Unit balance addr]`.
 Second, no exceptions are raised from the instructions in this program. There is an `ASSERT_SOME` instruction in the program that sends out an exception when the stack top is `None`, but since the account pointed to by  `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so it can't be an exception. The section `{ exc | False }` ContractAnnot contains states that the condition on the value of the exception is False, meaning that the exception does not occur. Then, if you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`.
 
 <!--
@@ -282,55 +282,56 @@ Some constructors in patterns need a type parameter `<ty>`. On the other hand, c
 
 #### Built-in Instructions
 > [name=hsaito]全部説明書くんかな...
+
 - `not` : bool -> bool
 - `get_str` : string -> int -> string
-    - `get_str s i`で s の i 文字目を取得し、1文字のstringとして返します
+    - `get_str s i` returns i-th character of s as a single string.
 - `sub_str` : string -> int -> int -> string
-    - `sub_str s i l` で s の i 文字目から l 文字をとった部分文字列を返します
+    - `sub_str s i l` returns a substring of s from i-th with the length of l
 - `len_str` : string -> int
-    - 文字列の長さを返します
+    - Return the length of the string
 - `concat_str` : string -> string -> string
-    - 文字列を結合します `^`演算子と同じです
+    - Concat the two strings. Same as `^` operator.
 - `get_bytes` : bytes -> int -> bytes
 - `sub_bytes` : bytes -> int -> int -> bytes
 - `len_bytes` : bytes -> int
 - `concat_bytes` : bytes -> bytes -> bytes
-    - バイト列を結合します
+    - Concat the two bytes.
 - `first` : pair 'a 'b -> 'a
 - `second` : pair 'a 'b -> 'b
 - `find_opt` : 'a -> map 'a 'b -> option 'b
-    - `find_opt k m`でm中からkで索引し、値`v`が存在すれば`Some v`、なければ`None`を返します
+    - `find_opt k m` indexes k from m and return `Some v` if v associated with k is exists. If not, return `None`
 - `update` : 'a -> option 'b -> map 'a 'b -> map 'a 'b
-    - `update k (Some v) m`とするとmのキーkに結びつく値をvで更新し、`update k None m`とすると削除します
+    - `update k (Some v) m` updates the value associated with k into v in map m. `update k None m` deletes the value associated with k from m.
 - `empty_map` : map 'a 'b
 - `mem` : 'a -> set 'a -> bool
 - `add` : 'a -> set 'a -> set 'a
 - `remove` : 'a -> set 'a -> set 'a
 - `empty_set` : set 'a
 - `source` : address
-    - `SOURCE`命令で取得できる値です
+    - Corresponding to `SOURCE` in Michelson.
 - `sender` : address
-    - `SENDER`命令で取得できる値です
+    - Corresponding to `SENDER` in Michelson.
 - `self` : contract parameter_ty
-    - `SELF`命令で取得できる値です
+    - Corresponding to `SELF` in Michelson.
 - `now` : timestamp
-    - `NOW`命令で取得できる値です
+    - Corresponding to `NOW` in Michelson.
 - `balance` : mutez
-    - `BALANCE`命令で取得できる値です
+    - Corresponding to `BALANCE` in Michelson.
 - `amount` : mutez
-    - `AMOUNT`命令で取得できる値です
+    - Corresponding to `AMOUNT` in Michelson.
 - `call` : fun 'a 'b -> 'a -> 'b -> bool
-    - `call f a b`は、引数aにLAMBDAによって作られた関数fを適用すると停止し、返り値bとなるならばTrue、そうでなければFalseを表す関数です
+    - `call` is a function where `call f a b` is  returns true if the function f created by LAMBDA is applied to argument a, terminates, and the return value is b. otherwise it is false.
 - `hash` : key -> address
-    - `HASH`命令に相当する関数です
+    - Corresponding to `HASH` in Michelson.
 - `blake2b` : bytes -> bytes
-    - `BLAKE2B`命令に相当する関数です
+    - Corresponding to `BLAKE2B` in Michelson.
 - `sha256` : bytes -> bytes
-    - `SHA256`命令に相当する関数です
+    - Corresponding to `SHA256` in Michelson.
 - `sha512` : bytes -> bytes
-    - `SHA512`命令に相当する関数です
+    - Corresponding to `SHA512` in Michelson.
 - `sig` : key -> signature -> bytes -> bool
-    - `CHECK_SIGNATURE`命令に相当する関数です
+    - Corresponding to `CHECK_SIGNATURE` in Michelson.
 
 ### Annotation
 A refinement type in the form of `{ stack | exp }` in annotations is a pair of a stack in the program and a verification condition for this stack.
@@ -436,7 +437,7 @@ The program can raise exceptions to `Error Unit` and `Error 0` in two places: `A
        }
 }
 ```
-This example is an introduction to the environment variables, `Assume`, `LoopInv` and `Measure`. The program first defines the sum of all elements in `list int` by `Measure` at the beginning. Next, `Assume` assigns the value of the stack at that point to the variable `l`, declared in the end of `ContractAnnot`. `LoopInv` gives the loop-invariant for `ITER`. `ITER { ADD }` is an instruction that adds the head of the list to `s` the second from the top of the stack. The loop-invariant condition `s + sumseq r = sumseq l` expresses that adding `s` to the sum of list `r` in process equals the sum of the list `l`. The condition written in Assume is forgotten because the previous assumptions are lost after going through LoopInv. So I add `l = first arg` to the loop-invariant condition so that the condition for the value of `l` is not forgotten.
+This example is an introduction to the environment variables, `Assume`, `LoopInv` and `Measure`. The program first defines the sum of all elements in `list int` by `Measure` at the beginning. Next, `Assume` assigns the value of the stack at that point to the variable `l`, declared in the end of `ContractAnnot`. `LoopInv` gives the loop-invariant for `ITER`. `ITER { ADD }` is an instruction that adds the head of the list to `s` the second from the top of the stack. The loop-invariant condition `s + sumseq r = sumseq l` expresses that adding `s` to the sum of list `r` in process equals the sum of the list `l`. The condition written in Assume are lost after going through LoopInv. I add `l = first arg` to the loop-invariant condition so that the condition for the value of `l` is not forgotten.
 
 <!--
 この例は環境変数, Assume, LoopInv, Measureの紹介です。
