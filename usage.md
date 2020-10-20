@@ -1,12 +1,13 @@
 # Abstract
-> [name=hsaito] とりあえずここに書きます 論文のabstと大体同じで良い？
+> [name=hsaito] ここで推敲します 
 
 Helmholtz is a static verification tool for Michelson, a smart contract language used in Tezos blockchain protocol. This tool takes a Michelson program annotated with a user-defined specification written in the form of a refinement type as input; it then typechecks the program against the specification based on the refinement type system, discharging the generated verification conditions with an SMT solver Z3.
+Helmholtz is implemented as a subcommand of tezos-client, the client of Tezos blockchain. This artifact includes a docker container in which tezos-sandboxed-node is up and Helmholtz can run. Helmholtz can verify several single contracts including practical ones.
 
 
 
 # Licence
-> [name=hsaito] tezosはMITライセンス
+> [name=hsaito] tezosはMITライセンス 同じで良い？
 
 Copyright (c) 2020 Igarashi Lab.
 
@@ -16,9 +17,37 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
 
+> Readme.txtここから
 # Helmholtz
 
 Helmholtz is a static verification tool for [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html), a smart contract language used in [Tezos](https://tezos.gitlab.io/) blockchain protocol.  It verifies that a Michelson program satisfies a user-written formal specification.
+
+## To reproduce the experimental result in the paper
+
+The following commands reproduce Table 1 in the paper.
+
+```
+% unzip helmholtz.zip
+% tar zxvf helmholtz/docker-19.03.9.tgz
+% export PATH="$PATH:/home/$USER/docker"
+% sudo dockerd &
+% sudo docker load --input helmholtz/helmholtz.img
+% sudo docker run -it helmholtz ./run_tacas2021_contracts.sh
+```
+| contract name          | #instr | time(ms) |
+|:-----------------------|-------:|---------:|
+| boomerang.tz           |     17 |       35 |
+| checksig.tz            |     38 |       65 |
+| checksig_unverified.tz |     36 |       62 |
+| deposit.tz             |     24 |       54 |
+| manager.tz             |     29 |       60 |
+| reservoir.tz           |     45 |       87 |
+| triangular_num.tz      |     16 |       35 |
+| vote.tz                |     24 |       62 |
+| vote_for_delegate.tz   |     87 |      143 |
+| xcat.tz                |     64 |      188 |
+
+These contracts our experiment used are in `~/ReFX/test_contracts/tacas2021`. If you want to replicate our each experiment, run `sudo docker run -it helmholtz tezos-client refinement test_contracts/tacas2021/<contract name>`.
 
 ## Quickstart
 When `src.tz` is in <path-in-the-host> directory,
@@ -56,6 +85,7 @@ To install the artifact on the VM, execute the following commands:
 - You can execute any subcommand of `tezos-client` (cf., [Tezos Whitedoc](https://tezos.gitlab.io/api/cli-commands.html?highlight=tezos%20client))
     - The version of the tezos running in the container is `005_PsBabyM1 Babylon`.
 
+<!--
 ##### 多分書かない情報
 - `% docker run -it helmholtz <command>`とすると、sandboxed-node を立ち上げる処理をしたのち command を実行します
     - 別にbashでなくても任意のコマンドで良いので、直接`tezos-client refinement`を叩いても良いです(実行後直ぐにコンテナが終了します)
@@ -64,6 +94,7 @@ To install the artifact on the VM, execute the following commands:
   storage (list int);
   << ContractAnnot ...'
 ```
+-->
 
 ## Example: Boomerang
 ```boomerang.tz
@@ -86,16 +117,17 @@ To install the artifact on the VM, execute the following commands:
         }
 }
 ```
+This code is a Michelson's program that returns a single operation to send `balance` to `source`, with annotations enclosed in `<<` and `>>`.
+The annotation labeled ContractAnnot states two property.
+First, the value `(ops, _)` stacked in the end state of the program's stack satisfies `ops = [TransferTokens Unit balance addr]`.
+Second, . There is an `ASSERT_SOME` instruction in the program that sends out an exception when the stack top is `None`, but since the account pointed to by the address of `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so it can't be an exception. ContractAnnot contains a section `{ exc | False }` that states that the condition on the value of the exception is False, meaning that the exception does not occur. Then, if you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`
+
+<!--
 これは`source`へ`balance`を送るoperationを返すMichelsonのプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードです。
 ContractAnnotと書かれた注釈には、プログラムの終了状態のstackに積まれた値`(ops, _)`に対し、`ops = [TransferTokens Unit balance addr]`を満たすことが記述されています。
 プログラム中にはスタックトップが`None`のときに例外を送出する`ASSERT_SOME`がありますが、`source`のaddressが指すアカウントは人間の操作するアカウントであるはずなので、`CONTRACT unit`は必ず`Some`を返すはずで、例外になることはないはずです。ContractAnnotには`{ exc | False }`の部分で例外の値の条件がFalse、つまり例外が起きないことを記述しています。
 そしてこのソースコードに対して`tezos-client refinement boomerang.tz`を実行すると`VERIFIED`と出力されるでしょう
-
-> (DeepL翻訳) This is the code of Michelson's program that returns the operation to send balance to source, with annotations enclosed in << and >. The annotation labeled ContractAnnot states that ops = [TransferTokens Unit balance addr] is satisfied for the value (ops, _) stacked in the end state of the program's stack. There is an ASSERT_SOME in the program that sends out an exception when the stack top is None, but since the account pointed to by the address of source should be a human-operated account, the CONTRACT unit should always return Some, so it can't be an exception! ContractAnnot contains a section { exc | False } that states that the condition on the value of the exception is False, meaning that the exception does not occur. Then, if you run tezos-client refinement boomerang.tz against this source code, you will get VERIFIED
-
-## Experiment
-
-
+-->
 
 ## How it works
 
@@ -150,7 +182,7 @@ EXP ::=
 	| if EXP then EXP else EXP
 	| CONSTRUCTOR
 	| EXP, EXP
-    | EXP : SORT
+	| EXP : SORT
 	| []
 	| EXP :: EXP
 	| [EXP; EXP; ...]
