@@ -24,16 +24,37 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Helmholtz is a static verification tool for [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html), a smart contract language used in [Tezos](https://tezos.gitlab.io/) blockchain protocol.  It verifies that a Michelson program satisfies a user-written formal specification.
 
-## To reproduce the experimental result in the paper (for TACAS 2021 AEC)
 
-The following commands reproduce Table 1 in the paper.
-
+## Quickstart
+To verify `src.tz` in <path-in-the-host> directory, sequentially execute the following commands in the host.
 ```
 % unzip helmholtz.zip
 % tar zxvf helmholtz/docker-19.03.9.tgz
 % export PATH="$PATH:/home/$USER/docker"
 % sudo dockerd &
 % sudo docker load --input helmholtz/helmholtz.img
+% sudo docker run -it helmholtz -v <path-in-the-host>:/home/opam/ReFX/mount tezos-client refinement mount/src.tz
+```
+
+
+## To reproduce the experimental result in the paper (for TACAS 2021 AEC)
+
+The following two files are in the submitted zip file.
+- .tgz package to install docker.
+- .img file of the image of a Docker container of the artifact.
+
+To install the artifact on the VM, execute the following commands:
+
+```
+% unzip helmholtz.zip                               # Extract the zip
+% tar zxvf helmholtz/docker-19.03.9.tgz
+% export PATH="$PATH:/home/$USER/docker"
+% sudo dockerd &                                    # Run docker daemon
+% sudo docker load --input helmholtz/helmholtz.img  # Load the container
+```
+
+And the following commands reproduce Table 1 in the paper.
+```
 % sudo docker run -it helmholtz ./run_tacas2021_contracts.sh
 ```
 | contract name          | #instr | time(ms) |
@@ -51,44 +72,13 @@ The following commands reproduce Table 1 in the paper.
 
 The contracts we used in the experiments are placed in `~/ReFX/test_contracts/tacas2021`. You can verify each contract by running `sudo docker run -it helmholtz tezos-client refinement test_contracts/tacas2021/<contract name>`.
 
-## Quickstart
-> [name=hsaito] To reproduce ... と被ってるしくどく無いか？
-> [name=ksuenaga] 後日公開するときにはこれを含めると思うので，書いておきましょう．
 
-To verify `src.tz` in <path-in-the-host> directory, sequentially execute the following commands in the host.
-```
-% unzip helmholtz.zip
-% tar zxvf helmholtz/docker-19.03.9.tgz
-% export PATH="$PATH:/home/$USER/docker"
-% sudo dockerd &
-% sudo docker load --input helmholtz/helmholtz.img
-% sudo docker run -it helmholtz -v <path-in-the-host>:/home/opam/ReFX/mount tezos-client refinement mount/src.tz
-```
-
-## How to install (for TACAS 2021 AEC)
-
-> [name=ksuenaga] ここは how to reproduce とかぶるので，そっちとマージするのが良いと思います．
-
-The following two files are in the submitted zip file.
-- .tgz package to install docker.
-- .img file of the image of a Docker container of the artifact.
-
-To install the artifact on the VM, execute the following commands:
-
-```
-% unzip helmholtz.zip                               # Extract the zip
-% tar zxvf helmholtz/docker-19.03.9.tgz
-% export PATH="$PATH:/home/$USER/docker"
-% sudo dockerd &                                    # Run docker daemon
-% sudo docker load --input helmholtz/helmholtz.img  # Load the container
-```
-
-## Detailed explanation of each command
+### Detailed explanation of each command
 
 > [name=ksuenaga] これは how to reproduce のセクションの末尾につけましょう．
 
-- `sudo docker run -it helmholtz bash` will run `bash` running in an environment that can execute Helmholtz.
-    - To run a directory in the host, run `docker run -it -v <path-in-the-host>:/home/opam/ReFX/mount helmholtz bash`
+- `sudo docker run -it helmholtz <command>` will run `<command>` such as `bash` running in an environment that can execute Helmholtz.
+    - To share a directory with the host, run `docker run -it -v <path-in-the-host>:/home/opam/ReFX/mount helmholtz <command>`
     - Tezos should be running in a sandbox inside the container.
 - To verify an annotated Michelson program `src.tz`, run `tezos-client refinement src.tz`.  You can write a program dirctly as a string instead of the file name `src.tz`.
     - Annotations are to give a formal specification (i.e., an intended behavior) and hints (e.g., a loop invariant) to a Michelson program.  See below for a detail.
@@ -105,6 +95,8 @@ To install the artifact on the VM, execute the following commands:
   << ContractAnnot ...'
 ```
 -->
+
+
 
 ## Example: Boomerang
 ```boomerang.tz
@@ -281,8 +273,6 @@ Some constructors in patterns need a type parameter `<ty>`. On the other hand, c
     - Overflow exception such as multiplications of mutez.
 
 #### Built-in Instructions
-> [name=hsaito]全部説明書くんかな...
-
 - `not` : bool -> bool
 - `get_str` : string -> int -> string
     - `get_str s i` returns i-th character of s as a single string.
@@ -321,7 +311,7 @@ Some constructors in patterns need a type parameter `<ty>`. On the other hand, c
 - `amount` : mutez
     - Corresponding to `AMOUNT` in Michelson.
 - `call` : fun 'a 'b -> 'a -> 'b -> bool
-    - `call` is a function where `call f a b` is  returns true if the function f created by LAMBDA is applied to argument a, terminates, and the return value is b. otherwise it is false.
+    - `call` is a function where `call f a b` is  returns true if, when the function f created by LAMBDA is applied to argument a, it terminates, and the return value is b. Otherwise it is false.
 - `hash` : key -> address
     - Corresponding to `HASH` in Michelson.
 - `blake2b` : bytes -> bytes
