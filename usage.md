@@ -1,13 +1,15 @@
 # Abstract
 > [name=hsaito] ここで推敲します 
+> [name=ksuenaga] 見ました．少し直しました．
 
-Helmholtz is a static verification tool for Michelson, a smart contract language used in Tezos blockchain protocol. This tool takes a Michelson program annotated with a user-defined specification written in the form of a refinement type as input; it then typechecks the program against the specification based on the refinement type system, discharging the generated verification conditions with an SMT solver Z3.
-Helmholtz is implemented as a subcommand of tezos-client, the client of Tezos blockchain. This artifact includes a docker container in which tezos-sandboxed-node is up and Helmholtz can run. Helmholtz can verify several single contracts including practical ones.
+Helmholtz is a static verification tool for Michelson---a smart contract language used in Tezos blockchain protocol. This tool takes a Michelson program annotated with a user-defined specification written in the form of a refinement type as input; it then typechecks the program against the specification based on our refinement type system, discharging the generated verification conditions with an SMT solver Z3.
+Helmholtz is implemented as a subcommand of `tezos-client`, which is the client of Tezos blockchain.
 
-
+This artifact is a docker container that provides an environment in which Helmholtz can be run.  The artifact also includes sample Michelson programs so that one can quickly try Helmholtz and confirm that the results in the accompanying paper is reproducible.
 
 # Licence
 > [name=hsaito] tezosはMITライセンス 同じで良い？
+> [name=ksuenaga] 良いと思います．
 
 Copyright (c) 2020 Igarashi Lab.
 
@@ -22,7 +24,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Helmholtz is a static verification tool for [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html), a smart contract language used in [Tezos](https://tezos.gitlab.io/) blockchain protocol.  It verifies that a Michelson program satisfies a user-written formal specification.
 
-## To reproduce the experimental result in the paper
+## To reproduce the experimental result in the paper (for TACAS 2021 AEC)
 
 The following commands reproduce Table 1 in the paper.
 
@@ -47,10 +49,13 @@ The following commands reproduce Table 1 in the paper.
 | vote_for_delegate.tz   |     87 |      143 |
 | xcat.tz                |     64 |      188 |
 
-These contracts our experiment used are in `~/ReFX/test_contracts/tacas2021`. If you want to replicate our each experiment, run `sudo docker run -it helmholtz tezos-client refinement test_contracts/tacas2021/<contract name>`.
+The contracts we used in the experiments are placed in `~/ReFX/test_contracts/tacas2021`. You can verify each contract by running `sudo docker run -it helmholtz tezos-client refinement test_contracts/tacas2021/<contract name>`.
 
 ## Quickstart
-When `src.tz` is in <path-in-the-host> directory,
+> [name=hsaito] To reproduce ... と被ってるしくどく無いか？
+> [name=ksuenaga] 後日公開するときにはこれを含めると思うので，書いておきましょう．
+
+To verify `src.tz` in <path-in-the-host> directory, sequentially execute the following commands in the host.
 ```
 % unzip helmholtz.zip
 % tar zxvf helmholtz/docker-19.03.9.tgz
@@ -61,6 +66,8 @@ When `src.tz` is in <path-in-the-host> directory,
 ```
 
 ## How to install (for TACAS 2021 AEC)
+
+> [name=ksuenaga] ここは how to reproduce とかぶるので，そっちとマージするのが良いと思います．
 
 The following two files are in the submitted zip file.
 - .tgz package to install docker.
@@ -76,7 +83,10 @@ To install the artifact on the VM, execute the following commands:
 % sudo docker load --input helmholtz/helmholtz.img  # Load the container
 ```
 
-## How to run the artifact
+## Detailed explanation of each command
+
+> [name=ksuenaga] これは how to reproduce のセクションの末尾につけましょう．
+
 - `sudo docker run -it helmholtz bash` will run `bash` running in an environment that can execute Helmholtz.
     - To run a directory in the host, run `docker run -it -v <path-in-the-host>:/home/opam/ReFX/mount helmholtz bash`
     - Tezos should be running in a sandbox inside the container.
@@ -364,6 +374,7 @@ There are 6 types of annotations below.
 - The `str` in `Timestamp str` accepts an RFC3339-compliant string.
 - The current annotation language does not distinguish between `int` and `nat`, `mutez`, and `timestamp` at the type level.
 - Operator precedence is OCaml compliant.
+- `LOOP_LEFT`, `APPLY`, (`LSL`, `LSR`, `AND`, `OR`, `XOR`, `NOT` as bit operations), `MAP`, (`SIZE` for map, set, and list), `CHAIN_ID`, and deprecated instructions are not yet supported.
 
 ### Q&A
 - Error `misaligned expression` is output
@@ -400,7 +411,7 @@ code  { DUP; DUP; DUP;
         PAIR };
 ```
 
-The program can raise exceptions to Error Unit and Error 0 in two places: ASSERT, PUSH int 0; FAILWITH, respectively. In this example, allowing exceptions to occur makes a stronger argument for a posterior condition. In the above program, the signature of the argument and the argument type check of the contract pointing to the address in storage are both checked, and if both of them fail, the above exception is raised. It is described as.
+The program can raise exceptions to `Error Unit` and `Error 0` in two places: `ASSERT`, `PUSH int 0; FAILWITH`, respectively. In this example, allowing exceptions makes the post-condition stronger. This program checks the signature given by the parameter is valid and the contract the address in storage pointing to has type `contract string`. If either of them fails, the above exception is raised. If the execution terminates successfully, both of them should be satisfied  and they are written in the post-condition.
 
 <!--
 このプログラムでは`ASSERT`, `PUSH int 0; FAILWITH`の二箇所からそれぞれ`Error Unit`, `Error 0`の例外が送出され得ます。ContractAnnotでは、この2つの例外が起こりうることを記述しています。
@@ -425,12 +436,12 @@ The program can raise exceptions to Error Unit and Error 0 in two places: ASSERT
        }
 }
 ```
-This example is an introduction to the environment variables, Assume, LoopInv and Measure. The program first defines the value of all the elements of list int added together by Measure at the beginning. Next, Assume connects the value of the stack at that point to the environment variable l, which is the end of ContractAnnot. This l is defined at the end of ContractAnnot. LoopInv gives the loop-invariant condition in ITER: ITER { ADD } is an instruction that adds the head of the list to the second s from the top of the stack. The loop-invariant condition s + sumseq r = sumseq l expresses that adding s to the sum of list r in process equals the sum of the first list l. The condition written in Assume is forgotten, as reducing LoopInv causes the previous assumption to be lost. So I add l = first arg to the loop-invariant condition so that the condition for l's value is not forgotten.
+This example is an introduction to the environment variables, `Assume`, `LoopInv` and `Measure`. The program first defines the sum of all elements in `list int` by `Measure` at the beginning. Next, `Assume` assigns the value of the stack at that point to the variable `l`, declared in the end of `ContractAnnot`. `LoopInv` gives the loop-invariant for `ITER`. `ITER { ADD }` is an instruction that adds the head of the list to `s` the second from the top of the stack. The loop-invariant condition `s + sumseq r = sumseq l` expresses that adding `s` to the sum of list `r` in process equals the sum of the list `l`. The condition written in Assume is forgotten because the previous assumptions are lost after going through LoopInv. So I add `l = first arg` to the loop-invariant condition so that the condition for the value of `l` is not forgotten.
 
 <!--
 この例は環境変数, Assume, LoopInv, Measureの紹介です。
 このプログラムは、まず先頭で list int の要素を全て足した値を Measure によって定義しています。
 次に Assume によってその時点での stack の値を環境変数`l`に結びつけています。この`l`は ContractAnnot の末尾で定義されたものです。
 そして LoopInv によって ITER 中でのループ不変条件を与えます。`ITER { ADD }`は、list の先頭をスタックの先頭から2番目`s`に全て足す命令です。ループ不変条件`s + sumseq r = sumseq l`は、処理中のリスト`r`の総和に`s`を足すと、最初のリスト`l`の総和と等しくなるということが表現されています。
-LoopInvを減るとそれまでの仮定が失われてしまうので、Assumeで書いた条件は忘れられています。なので`l = first arg`をループ不変条件に追加して、`l`の値の条件が忘れられないようにしています。
+LoopInvを経るとそれまでの仮定が失われてしまうので、Assumeで書いた条件は忘れられています。なので`l = first arg`をループ不変条件に追加して、`l`の値の条件が忘れられないようにしています。
 -->
