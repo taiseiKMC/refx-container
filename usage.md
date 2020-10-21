@@ -49,7 +49,7 @@ To install the artifact on the VM, execute the following commands:
 % sudo docker load --input helmholtz/helmholtz.img  # Load the container
 ```
 
-And the following commands reproduce Table 1 in the paper. (Output time will be vary depending on the environment)
+And the following commands reproduce Table 1 in the paper. (Output time depends on the environment)
 ```
 % sudo docker run -it helmholtz ./run_tacas2021_contracts.sh
 ```
@@ -75,7 +75,7 @@ The contracts we used in the experiments are placed in `~/ReFX/test_contracts/ta
     - If you want to work in the container, execute `bash` as `<command>`
     - To share a directory with the host, run `docker run -it -v <path-in-the-host>:/home/opam/ReFX/mount helmholtz <command>`
     - Tezos should be running in a sandbox inside the container.
-- To verify an annotated Michelson program `src.tz`, run `tezos-client refinement src.tz`.  You can write a program dirctly as a string instead of the file name `src.tz`.
+- To verify an annotated Michelson program `src.tz`, run `tezos-client refinement src.tz`.  You can write a s dirctly as a string instead of the file name `src.tz`.
     - Annotations are to give a formal specification (i.e., an intended behavior) and hints (e.g., a loop invariant) to a Michelson program.  See below for a detail.
 - You can execute any subcommand of `tezos-client` (cf., [Tezos Whitedoc](https://tezos.gitlab.io/api/cli-commands.html?highlight=tezos%20client))
     - The version of the tezos running in the container is `005_PsBabyM1 Babylon`.
@@ -106,7 +106,7 @@ The above code, which is the contents of `boomerang.tz` in the container, is a M
 This annotation, which is labeled by a constructor `ContractAnnot`, states the following two properties.
 
 + The pair `(ops, _)`, which is in the stack at the end of the program, satisfies `ops = [TransferTokens Unit balance addr]`; this operation means that this contract will send money amount `balance` to `addr` with argument `Unit` after this contract finishes.
-+ No exceptions are raised from the instructions in this program; this is expressed by the part `... & { exc | False }`.  (There is an `ASSERT_SOME` instruction in the program that may raise an exception when the stack top is `None`, but since, from the specification of Michelson, the account pointed to by `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so no exception will be raised. 
++ No exceptions are raised from the instructions in this program; this is expressed by the part `... & { exc | False }`.  There is an `ASSERT_SOME` instruction in the program that may raise an exception when the stack top is `None`, but since, from the specification of Michelson, the account pointed to by `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so no exception will be raised. 
 
 If you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`.
 
