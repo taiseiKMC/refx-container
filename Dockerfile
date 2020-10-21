@@ -17,8 +17,9 @@ RUN opam init --bare
 RUN make build-deps
 RUN eval $(opam env)
 ENV PATH $PATH:/home/opam/ReFX/_opam/bin:/home/opam/.opam/4.07.1/bin
+RUN sudo apt install -y bsdmainutils
 ARG COMMIT_HASH=""
-RUN git fetch && git checkout origin/hsaito/new_lang
+RUN git fetch && git checkout origin/hsaito/experiment
 RUN make
 ENV TEZOS_CLIENT_UNSAFE_DISABLE_DISCLAIMER "Y"
 
