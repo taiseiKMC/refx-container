@@ -337,40 +337,34 @@ There are 6 types of annotations below.
         - `rtype2` is a post-condition for the stack (=`[pair (list operation) storage_ty]`) when the program ends.
         - `rtype3` is a refinement type for the value the exception the program may throw has.
         - It is possible to declare ghost variables in `vars` that can be used in annotation inside the program.
-            - Can not use these in the `rtype1`, `rtype2`, and `rtype3`.
+            - The ghost variables can be used in the annotations in `code` section.  They cannot be used in `rtype1`, `rtype2`, and `rtype3`.
     - A `ContractAnnot` annotation must be placed just before a `code` section.
 - `LambdaAnnot rtype1 -> rtype2 & rtype3 tvars`
-    - Execute the function stacked by `LAMBDA` with the pre-condition `rtype1`, and if it ends successfully, the post-condition `rtype2` is satisfied, and if an exception is raised, make sure the exception value satisfies `rtype3`.
-    - `rtype1` is a pre-condition for the stack (=`[pair parameter_ty storage_ty]`) when the function starts.
-    - `rtype2` is a post-condition for the stack (=`[pair (list operation) storage_ty]`) when the function ends.
-    - `rtype3` is a refinement type for the value the exception the function may throw has.
-    - It is possible to declare some variables in `vars` that can be used in annotation inside the function.
-        - Can not use these in the `rtype1`, `rtype2`, and `rtype3`.
-    - A `ContractAnnot` annotation Must be written just before `LAMBDA`.
+    - This annotation gives the specification of a function that is created by an instruction `LAMBDA`.  A `LAMBDA` instruction associated with an annotation `LambdaAnnot rtype1 -> rtype2 & rtype3 tvars` should behave as if it is a contract annoted with `ContractAnnot rtype1 -> rtype2 & rtype3`.
+    - A `LambdaAnnot` annotation must be placed just before `LAMBDA`.
 - `Assert rtype`
-    - It checks the stack at the point where  `Assert` is wrriten satisfies the verification condition given by `rtype`.
-    - It is possible to place between any two instructions.
+    - It asserts that the stack at the program point where this annotation is placed satisfies `rtype`.
+    - An assertion is checked by Helmholtz; if it is not verified, then the result of Helmholtz will be `UNVERIFIED`.
 - `Assume rtype`
-    - It give the assumption for the stack by `rtype`.
-    - It is possible to place between any two instructions.
+    - It assumes that the stack at the program point where this annotation is placed satisfies `rtype`.
+    - Helmholtz assumes that a correct assumption is given.  It is user's responsibility to make sure that the assumption is correct.  If a wrong assumption is given, the verification result may not be reliable.
 - `LoopInv rtype`
-    - It give a loop invariant by `rtype`
-    - It checks the stack before and after the loop satisfies the verification condition.
+    - This annotation declares a loop invariant.  It is placed just before `LOOP` and `ITER` and specifies that the stack at the beginning of each iteration satisfies `rtype`.
     - **All the conditions assumed before the loop are gone after the loop, except those described in `LoopInv`.**
-    - A `LoopInv` annotation Must be written just before `LOOP`, `ITER`
+    - A `LoopInv` annotation must be placed just before `LOOP`, `ITER`
         - `MAP`, `LOOP_LEFT` are not yet supported
 - `Measure`
-    - A feature to give some specification of list, set and map
-    - If you want, `Measure` annotations should be written  before `ContractAnnot`
+    - This annotation defines a (recursive) function over a list, a set, or a map that can be used in annotations.
+    - `Measure` annotations should be placed before `ContractAnnot`.
 
 
 #### Details
-- `Key`, `Address`, `Signature` are not defined as constructors. This is because we don't want to deconstruct the `key`, `address`, and `signature` values into a string or bytes.
+- `Key`, `Address`, `Signature` are not defined as constructors.  This is because we don't want to deconstruct the `key`, `address`, and `signature` values into a string or bytes.
 - The `str` in `Timestamp str` accepts an RFC3339-compliant string.
 - The current annotation language does not distinguish between `int` and `nat`, `mutez`, and `timestamp` at the type level.
-- Operator precedence is OCaml compliant.
+- Operator precedence follows the convention of OCaml.
 - `LOOP_LEFT`, `APPLY`, (`LSL`, `LSR`, `AND`, `OR`, `XOR`, `NOT` as bit operations), `MAP`, (`SIZE` for map, set, and list), `CHAIN_ID`, and deprecated instructions are not yet supported.
-- Some relations between constants are not infered automatically. For examples, despite the fact that `sha256 0x0 = 0x6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d` is true, Helmholtz will not verify this. If you need such properties, use `Assume`.
+- Some relations between constants are not inferred automatically. For examples, despite the fact that `sha256 0x0 = 0x6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d` is true, Helmholtz will not verify this. If you need such properties, use `Assume`.
 - When ITERate map or set, Helmholtz can not use the condition about the order of the iteration.
 
 ### Q&A
@@ -408,7 +402,7 @@ code  { DUP; DUP; DUP;
         PAIR };
 ```
 
-The program can raise exceptions to `Error Unit` and `Error 0` in two places: `ASSERT`, `PUSH int 0; FAILWITH`, respectively. In this example, allowing exceptions makes the post-condition stronger. This program checks the signature given by the parameter is valid and the contract the address in storage pointing to has type `contract string`. If either of them fails, the above exception is raised. If the execution terminates successfully, both of them should be satisfied  and they are written in the post-condition.
+This program checks the signature given by the parameter is valid and the contract that the address in storage points to has type `contract string`; this behavior is described in the post-condition part of `ContractAnnot`.  The exception part in `ContractAnnot` expresses that the program can raise two kinds of exceptions: `Error Unit` in `ASSERT` and `Error 0` in `FAILWITH`.
 
 <!--
 このプログラムでは`ASSERT`, `PUSH int 0; FAILWITH`の二箇所からそれぞれ`Error Unit`, `Error 0`の例外が送出され得ます。ContractAnnotでは、この2つの例外が起こりうることを記述しています。
@@ -433,7 +427,8 @@ The program can raise exceptions to `Error Unit` and `Error 0` in two places: `A
        }
 }
 ```
-This example is an introduction to the environment variables, `Assume`, `LoopInv` and `Measure`. The program first defines the sum of all elements in `list int` by `Measure` at the beginning. Next, `Assume` assigns the value of the stack at that point to the variable `l`, declared in the end of `ContractAnnot`. `LoopInv` gives the loop-invariant for `ITER`. `ITER { ADD }` is an instruction that adds the head of the list to `s` the second from the top of the stack. The loop-invariant condition `s + sumseq r = sumseq l` expresses that adding `s` to the sum of list `r` in process equals the sum of the list `l`. The condition written in Assume are lost after going through LoopInv. I add `l = first arg` to the loop-invariant condition so that the condition for the value of `l` is not forgotten.
+
+This contract computes the sum of the integers in the list passed as a parameter.  The `ContractAnnot` annotation uses the function `sumseq`, which is defined in the earlier `Measure` annotation.  In the `code` section, the `Assume` annotation is used to specify that `l`, which is declared to be a ghost variable in the `ContractAnnot`, is the list passed as a parameter.  `LoopInv` gives the loop-invariant for `ITER`. `ITER { ADD }` is an instruction that adds the head of the list to the second `s` from the top of the stack. The loop-invariant condition `s + sumseq r = sumseq l` expresses that adding `s` to the sum of list `r` in process equals the sum of the list `l`.
 
 <!--
 この例は環境変数, Assume, LoopInv, Measureの紹介です。
