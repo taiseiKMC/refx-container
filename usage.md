@@ -1,6 +1,4 @@
 # Abstract
-> [name=hsaito] ここで推敲します 
-> [name=ksuenaga] 見ました．少し直しました．
 
 Helmholtz is a static verification tool for Michelson---a smart contract language used in Tezos blockchain protocol. This tool takes a Michelson program annotated with a user-defined specification written in the form of a refinement type as input; it then typechecks the program against the specification based on our refinement type system, discharging the generated verification conditions with an SMT solver Z3.
 Helmholtz is implemented as a subcommand of `tezos-client`, which is the client of Tezos blockchain.
@@ -8,8 +6,6 @@ Helmholtz is implemented as a subcommand of `tezos-client`, which is the client 
 This artifact is a docker container that provides an environment in which Helmholtz can be run.  The artifact also includes sample Michelson programs so that one can quickly try Helmholtz and confirm that the results in the accompanying paper is reproducible.
 
 # Licence
-> [name=hsaito] tezosはMITライセンス 同じで良い？
-> [name=ksuenaga] 良いと思います．
 
 Copyright (c) 2020 Igarashi Lab.
 
@@ -48,12 +44,12 @@ To install the artifact on the VM, execute the following commands:
 ```
 % unzip helmholtz.zip                               # Extract the zip
 % tar zxvf helmholtz/docker-19.03.9.tgz
-% sudo cp docker/* /usr/bin
+% sudo cp docker/* /usr/bin                         # Install Docker
 % sudo dockerd &                                    # Run docker daemon
 % sudo docker load --input helmholtz/helmholtz.img  # Load the container
 ```
 
-And the following commands reproduce Table 1 in the paper.
+And the following commands reproduce Table 1 in the paper. (Output time will be vary depending on the environment)
 ```
 % sudo docker run -it helmholtz ./run_tacas2021_contracts.sh
 ```
@@ -75,27 +71,14 @@ The contracts we used in the experiments are placed in `~/ReFX/test_contracts/ta
 
 ### Detailed explanation of each command
 
-> [name=ksuenaga] これは how to reproduce のセクションの末尾につけましょう．
-
-- `sudo docker run -it helmholtz <command>` will run `<command>` such as `bash` running in an environment that can execute Helmholtz.
+- `sudo docker run -it helmholtz <command>` will run `<command>` running in an environment that can execute Helmholtz.
+    - If you want to work in the container, execute `bash` as `<command>`
     - To share a directory with the host, run `docker run -it -v <path-in-the-host>:/home/opam/ReFX/mount helmholtz <command>`
     - Tezos should be running in a sandbox inside the container.
 - To verify an annotated Michelson program `src.tz`, run `tezos-client refinement src.tz`.  You can write a program dirctly as a string instead of the file name `src.tz`.
     - Annotations are to give a formal specification (i.e., an intended behavior) and hints (e.g., a loop invariant) to a Michelson program.  See below for a detail.
 - You can execute any subcommand of `tezos-client` (cf., [Tezos Whitedoc](https://tezos.gitlab.io/api/cli-commands.html?highlight=tezos%20client))
     - The version of the tezos running in the container is `005_PsBabyM1 Babylon`.
-
-<!--
-##### 多分書かない情報
-- `% docker run -it helmholtz <command>`とすると、sandboxed-node を立ち上げる処理をしたのち command を実行します
-    - 別にbashでなくても任意のコマンドで良いので、直接`tezos-client refinement`を叩いても良いです(実行後直ぐにコンテナが終了します)
-```
-% docker run -it helmholtz tezos-client refinement '{ parameter (list int);
-  storage (list int);
-  << ContractAnnot ...'
-```
--->
-
 
 
 ## Example: Boomerang
@@ -127,16 +110,8 @@ This annotation, which is labeled by a constructor `ContractAnnot`, states the f
 
 If you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`.
 
-<!--
-これは`source`へ`balance`を送るoperationを返すMichelsonのプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードです。
-ContractAnnotと書かれた注釈には、プログラムの終了状態のstackに積まれた値`(ops, _)`に対し、`ops = [TransferTokens Unit balance addr]`を満たすことが記述されています。
-プログラム中にはスタックトップが`None`のときに例外を送出する`ASSERT_SOME`がありますが、`source`のaddressが指すアカウントは人間の操作するアカウントであるはずなので、`CONTRACT unit`は必ず`Some`を返すはずで、例外になることはないはずです。ContractAnnotには`{ exc | False }`の部分で例外の値の条件がFalse、つまり例外が起きないことを記述しています。
-そしてこのソースコードに対して`tezos-client refinement boomerang.tz`を実行すると`VERIFIED`と出力されるでしょう
--->
 
 ## How Helmholtz works
-
-<!-- - ツールに投げるソースコードは言語 [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html) で記述されたプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードである必要があります -->
 
 Helmholtz accepts a [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html) program annotaed with its formal specification and hints (e.g., loop invariants) used by Helmholtz.  An annotation is surrounded by `<<` and `>>`.
 
@@ -148,6 +123,7 @@ Helmholtz works as follows.
 
 ## Spec of Assertion Language
 ### Syntax
+
 ```
 ANNOTATION ::=
 	| Assert RTYPE
@@ -350,7 +326,6 @@ There are 6 types of annotations below.
     - Helmholtz assumes that a correct assumption is given.  It is user's responsibility to make sure that the assumption is correct.  If a wrong assumption is given, the verification result may not be reliable.
 - `LoopInv rtype`
     - This annotation declares a loop invariant.  It is placed just before `LOOP` and `ITER` and specifies that the stack at the beginning of each iteration satisfies `rtype`.
-    - **All the conditions assumed before the loop are gone after the loop, except those described in `LoopInv`.**
     - A `LoopInv` annotation must be placed just before `LOOP`, `ITER`
         - `MAP`, `LOOP_LEFT` are not yet supported
 - `Measure`
@@ -366,10 +341,13 @@ There are 6 types of annotations below.
 - `LOOP_LEFT`, `APPLY`, (`LSL`, `LSR`, `AND`, `OR`, `XOR`, `NOT` as bit operations), `MAP`, (`SIZE` for map, set, and list), `CHAIN_ID`, and deprecated instructions are not yet supported.
 - Some relations between constants are not inferred automatically. For examples, despite the fact that `sha256 0x0 = 0x6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d` is true, Helmholtz will not verify this. If you need such properties, use `Assume`.
 - When ITERate map or set, Helmholtz can not use the condition about the order of the iteration.
+- Our source codes of Helmholtz is in `/home/opam/ReFX/src/proto_005_PsBabyM1/lib_refx` in the container.
 
 ### Q&A
 - Error `misaligned expression` is output
     - It is not an error output by Helmholtz, but an error by indent-check by Michelson `tezos-client typecheck`. For the rules of indentation, see [here](https://tezos.gitlab.io/whitedoc/micheline.html).
+- Error `MenhirBasics.Error` is output
+    - This is an syntax error output by Helmholtz. Please check the annotations you give.
 
 ## Examples
 ### checksig.tz
@@ -404,10 +382,6 @@ code  { DUP; DUP; DUP;
 
 This program checks the signature given by the parameter is valid and the contract that the address in storage points to has type `contract string`; this behavior is described in the post-condition part of `ContractAnnot`.  The exception part in `ContractAnnot` expresses that the program can raise two kinds of exceptions: `Error Unit` in `ASSERT` and `Error 0` in `FAILWITH`.
 
-<!--
-このプログラムでは`ASSERT`, `PUSH int 0; FAILWITH`の二箇所からそれぞれ`Error Unit`, `Error 0`の例外が送出され得ます。ContractAnnotでは、この2つの例外が起こりうることを記述しています。
-この例では例外が起こりうることを許容することで事後条件にはより強い主張ができています。上のプログラムでは引数のsignatureの検証、storage上のaddressの指すコントラクトの引数型チェックをしており、それぞれ失敗すると上記の例外が出るわけですが、このプログラムが正常終了した場合はどちらもうまくいっているはずであり、事後条件にはそのことが記述されています。
--->
 
 ### sumseq.tz
 ```
@@ -429,11 +403,3 @@ This program checks the signature given by the parameter is valid and the contra
 ```
 
 This contract computes the sum of the integers in the list passed as a parameter.  The `ContractAnnot` annotation uses the function `sumseq`, which is defined in the earlier `Measure` annotation.  In the `code` section, the `Assume` annotation is used to specify that `l`, which is declared to be a ghost variable in the `ContractAnnot`, is the list passed as a parameter.  `LoopInv` gives the loop-invariant for `ITER`. `ITER { ADD }` is an instruction that adds the head of the list to the second `s` from the top of the stack. The loop-invariant condition `s + sumseq r = sumseq l` expresses that adding `s` to the sum of list `r` in process equals the sum of the list `l`.
-
-<!--
-この例は環境変数, Assume, LoopInv, Measureの紹介です。
-このプログラムは、まず先頭で list int の要素を全て足した値を Measure によって定義しています。
-次に Assume によってその時点での stack の値を環境変数`l`に結びつけています。この`l`は ContractAnnot の末尾で定義されたものです。
-そして LoopInv によって ITER 中でのループ不変条件を与えます。`ITER { ADD }`は、list の先頭をスタックの先頭から2番目`s`に全て足す命令です。ループ不変条件`s + sumseq r = sumseq l`は、処理中のリスト`r`の総和に`s`を足すと、最初のリスト`l`の総和と等しくなるということが表現されています。
-LoopInvを経るとそれまでの仮定が失われてしまうので、Assumeで書いた条件は忘れられています。なので`l = first arg`をループ不変条件に追加して、`l`の値の条件が忘れられないようにしています。
--->
