@@ -22,7 +22,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 > Readme.txtここから
 # Helmholtz
 
-Helmholtz is a static verification tool for [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html), a smart contract language used in [Tezos](https://tezos.gitlab.io/) blockchain protocol.  It verifies that a Michelson program satisfies a user-written formal specification.
+Helmholtz is a static verification tool for a stack-based programming language [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html), a smart contract language used in [Tezos](https://tezos.gitlab.io/) blockchain protocol.  It verifies that a Michelson program satisfies a user-written formal specification.
 
 
 ## Quickstart
@@ -30,7 +30,7 @@ To verify `src.tz` in <path-in-the-host> directory, sequentially execute the fol
 ```
 % unzip helmholtz.zip
 % tar zxvf helmholtz/docker-19.03.9.tgz
-% export PATH="$PATH:/home/$USER/docker"
+% sudo cp docker/* /usr/bin
 % sudo dockerd &
 % sudo docker load --input helmholtz/helmholtz.img
 % sudo docker run -it helmholtz -v <path-in-the-host>:/home/opam/ReFX/mount tezos-client refinement mount/src.tz
@@ -48,7 +48,7 @@ To install the artifact on the VM, execute the following commands:
 ```
 % unzip helmholtz.zip                               # Extract the zip
 % tar zxvf helmholtz/docker-19.03.9.tgz
-% export PATH="$PATH:/home/$USER/docker"
+% sudo cp docker/* /usr/bin
 % sudo dockerd &                                    # Run docker daemon
 % sudo docker load --input helmholtz/helmholtz.img  # Load the container
 ```
@@ -121,8 +121,11 @@ The contracts we used in the experiments are placed in `~/ReFX/test_contracts/ta
 ```
 The above code, which is the contents of `boomerang.tz` in the container, is a Michelson program that transfers money amout `balance` to an account `source`.  The program comes with an annotation surrounded by `<<` and `>>`.  
 This annotation, which is labeled by a constructor `ContractAnnot`, states the following two properties.
-+ The value `(ops, _)` stacked in the end of this program satisfies `ops = [TransferTokens Unit balance addr]`.
-Second, no exceptions are raised from the instructions in this program. There is an `ASSERT_SOME` instruction in the program that sends out an exception when the stack top is `None`, but since the account pointed to by  `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so it can't be an exception. The section `{ exc | False }` ContractAnnot contains states that the condition on the value of the exception is False, meaning that the exception does not occur. Then, if you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`.
+
++ The pair `(ops, _)`, which is in the stack at the end of the program, satisfies `ops = [TransferTokens Unit balance addr]`; this operation means that this contract will send money amount `balance` to `addr` with argument `Unit` after this contract finishes.
++ No exceptions are raised from the instructions in this program; this is expressed by the part `... & { exc | False }`.  (There is an `ASSERT_SOME` instruction in the program that may raise an exception when the stack top is `None`, but since, from the specification of Michelson, the account pointed to by `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so no exception will be raised. 
+
+If you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`.
 
 <!--
 これは`source`へ`balance`を送るoperationを返すMichelsonのプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードです。
@@ -131,7 +134,7 @@ ContractAnnotと書かれた注釈には、プログラムの終了状態のstac
 そしてこのソースコードに対して`tezos-client refinement boomerang.tz`を実行すると`VERIFIED`と出力されるでしょう
 -->
 
-## How it works
+## How Helmholtz works
 
 <!-- - ツールに投げるソースコードは言語 [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html) で記述されたプログラムに、`<<`と`>>`で囲まれた注釈を付与したコードである必要があります -->
 
@@ -139,10 +142,9 @@ Helmholtz accepts a [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html)
 
 Helmholtz works as follows.
 - If `tezos-client refinement <src>` is executed, Helmholtz strips the annotations surrounded by `<<` and `>>` and typechecks the stripped code using `tezos-client typecheck`; the simple type checking is conducted in this step.
-- After typechecking, `tezos-client refinement` generates verification conditions from annotations users give
-    - Generated verification conditions can be shown in `.refx/out.smt2` or the directory given by `-l` option.
-- At last, Helmholtz discharges the conditions with `z3` and outputs `VERIFIED` or `UNVERIFIED`.
-
+- After typechecking, `tezos-client refinement` generates verification conditions based on the type system described in the accompanying paper.
+    - Generated verification conditions is stored in `.refx/out.smt2` or in the directory given by `-l` option.
+- Then, Helmholtz discharges the conditions with `z3` and outputs `VERIFIED` or `UNVERIFIED`.
 
 ## Spec of Assertion Language
 ### Syntax
@@ -247,52 +249,53 @@ SORT ::=
 ```
 
 #### Constructors
-Some constructors in patterns need a type parameter `<ty>`. On the other hand, constructors in exp should not have `<ty>` (`ty` will be infered).
 
-- `Nil` : list 'a
-- `Cons` : 'a -> list 'a -> list 'a
-- `Left` : 'a -> or 'a 'b
-- `Right` : 'a -> or 'b 'a
-- `Some` : 'a -> option 'a
-- `None` : option 'a
-- `Pair` : 'a -> 'b -> pair 'a 'b
-- `True` : bool
-- `False` : bool
-- `Unit` : unit
-- `Pack` <ty> : ty -> bytes
-    - It corresponds to `PACK`, `UNPACK` in Michelson. It is expressed by a constructor because it needs type information.
-- `Contract` <ty> : address -> contract ty
-- `SetDelegate` : option key -> operation
-- `TransferTokens`(Transfer) <ty> : ty -> mutez -> contract ty -> operation
-- `CreateContract` <ty> : option address -> mutez -> ty -> address -> operation
-    - `CreateContract ka tz stor addr` means a operation if the stack is `ka : tz : stor : S` , `CREATE_CONTRACT` is executed, and transition to `addr : op : S`
-    
-- `Error` <ty> : ty -> exception
-    - Exceptions raised by `FAILWITH` instruction
-- `Overflow` : exception
-    - Overflow exception such as multiplications of mutez.
+Some constructors in the pattern langauge require a type parameter `<ty>`, whereas constructors in `exp` do not.  (The type will be automatically infered).
+
+The type of each constructor is as follows.
+
++ `Nil` : list 'a
++ `Cons` : 'a -> list 'a -> list 'a
++ `Left` : 'a -> or 'a 'b
++ `Right` : 'a -> or 'b 'a
++ `Some` : 'a -> option 'a
++ `None` : option 'a
++ `Pair` : 'a -> 'b -> pair 'a 'b
++ `True` : bool
++ `False` : bool
++ `Unit` : unit
++ `Pack` <ty> : ty -> bytes
+    + A value with this constrcutor corresponds to a value created by the instruction `PACK` in Michelson.  It is expressed by a constructor because it needs type information.
++ `Contract` <ty> : address -> contract ty
++ `SetDelegate` : option key -> operation
++ `TransferTokens`(Transfer) <ty> : ty -> mutez -> contract ty -> operation
++ `CreateContract` <ty> : option address -> mutez -> ty -> address -> operation
++ `Error` <ty> : ty -> exception
+    - Represents an exception raised by `FAILWITH` instruction.
++ `Overflow` : exception
+    - Represents an overflow exception.
 
 #### Built-in Instructions
 - `not` : bool -> bool
 - `get_str` : string -> int -> string
     - `get_str s i` returns i-th character of s as a single string.
 - `sub_str` : string -> int -> int -> string
-    - `sub_str s i l` returns a substring of s from i-th with the length of l
+    - `sub_str s i l` returns a substring of s from i-th with the length of l.
 - `len_str` : string -> int
-    - Return the length of the string
+    - Returns the length of the string.
 - `concat_str` : string -> string -> string
-    - Concat the two strings. Same as `^` operator.
+    - Concatenates the two strings.  Same as `^` operator.
 - `get_bytes` : bytes -> int -> bytes
 - `sub_bytes` : bytes -> int -> int -> bytes
 - `len_bytes` : bytes -> int
 - `concat_bytes` : bytes -> bytes -> bytes
-    - Concat the two bytes.
+    - Concatenates two `bytes` values.
 - `first` : pair 'a 'b -> 'a
 - `second` : pair 'a 'b -> 'b
 - `find_opt` : 'a -> map 'a 'b -> option 'b
-    - `find_opt k m` indexes k from m and return `Some v` if v associated with k is exists. If not, return `None`
+    - `find_opt k m` looks for an entry associated with key `k` from map `m`; it returns `Some v` if `v` associated with `k` in `m`; returns `None` otherwise.
 - `update` : 'a -> option 'b -> map 'a 'b -> map 'a 'b
-    - `update k (Some v) m` updates the value associated with k into v in map m. `update k None m` deletes the value associated with k from m.
+    - `update k (Some v) m` updates the value associated with `k` in `m` to `v`; `update k None m` deletes the value associated with `k` from `m`.
 - `empty_map` : map 'a 'b
 - `mem` : 'a -> set 'a -> bool
 - `add` : 'a -> set 'a -> set 'a
@@ -311,7 +314,7 @@ Some constructors in patterns need a type parameter `<ty>`. On the other hand, c
 - `amount` : mutez
     - Corresponding to `AMOUNT` in Michelson.
 - `call` : fun 'a 'b -> 'a -> 'b -> bool
-    - `call` is a function where `call f a b` is  returns true if, when the function f created by LAMBDA is applied to argument a, it terminates, and the return value is b. Otherwise it is false.
+    - `call f a b`, where `f` returns `true` if the application of function `f` created by `LAMBDA` to argument `a` terminates and evaluates to `b`; `false` otherwise.
 - `hash` : key -> address
     - Corresponding to `HASH` in Michelson.
 - `blake2b` : bytes -> bytes
@@ -324,17 +327,18 @@ Some constructors in patterns need a type parameter `<ty>`. On the other hand, c
     - Corresponding to `CHECK_SIGNATURE` in Michelson.
 
 ### Annotation
-A refinement type in the form of `{ stack | exp }` in annotations is a pair of a stack in the program and a verification condition for this stack.
+
+In the following explanations of annotations, `rtype` represents a refinement type `{ stack | exp }` a pattern that maches a stack; `exp` is an expression of type `bool`.  It represents a `stack` in which `exp` evaluates to `true`.
 
 There are 6 types of annotations below.
 - `ContractAnnot rtype1 -> rtype2 & rtype3 vars`
-    - Execute the program with the pre-condition `rtype1`, and if it ends successfully, the post-condition `rtype2` is satisfied, and if an exception is raised, make sure the exception value satisfies `rtype3`.
-    - `rtype1` is a pre-condition for the stack (=`[pair parameter_ty storage_ty]`) when the program starts.
-    - `rtype2` is a post-condition for the stack (=`[pair (list operation) storage_ty]`) when the program ends.
-    - `rtype3` is a refinement type for the value the exception the program may throw has.
-    - It is possible to declare some variables in `vars` that can be used in annotation inside the program.
-        - Can not use these in the `rtype1`, `rtype2`, and `rtype3`.
-    - A `ContractAnnot` annotation Must be written just before `code`
+    - This annotation gives the specification of a contract.  If this contract is executed with an initial stack that satisfies the pre-condition `rtype1`, and if it finishes its execution without exception, then the resulting stack satisfies the post-condition `rtype2`; if an exception is raised, then the exception value satisfies `rtype3`.
+        - `rtype1` is a pre-condition for the stack (=`[pair parameter_ty storage_ty]`) when the program starts.
+        - `rtype2` is a post-condition for the stack (=`[pair (list operation) storage_ty]`) when the program ends.
+        - `rtype3` is a refinement type for the value the exception the program may throw has.
+        - It is possible to declare ghost variables in `vars` that can be used in annotation inside the program.
+            - Can not use these in the `rtype1`, `rtype2`, and `rtype3`.
+    - A `ContractAnnot` annotation must be placed just before a `code` section.
 - `LambdaAnnot rtype1 -> rtype2 & rtype3 tvars`
     - Execute the function stacked by `LAMBDA` with the pre-condition `rtype1`, and if it ends successfully, the post-condition `rtype2` is satisfied, and if an exception is raised, make sure the exception value satisfies `rtype3`.
     - `rtype1` is a pre-condition for the stack (=`[pair parameter_ty storage_ty]`) when the function starts.
@@ -366,6 +370,8 @@ There are 6 types of annotations below.
 - The current annotation language does not distinguish between `int` and `nat`, `mutez`, and `timestamp` at the type level.
 - Operator precedence is OCaml compliant.
 - `LOOP_LEFT`, `APPLY`, (`LSL`, `LSR`, `AND`, `OR`, `XOR`, `NOT` as bit operations), `MAP`, (`SIZE` for map, set, and list), `CHAIN_ID`, and deprecated instructions are not yet supported.
+- Some relations between constants are not infered automatically. For examples, despite the fact that `sha256 0x0 = 0x6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d` is true, Helmholtz will not verify this. If you need such properties, use `Assume`.
+- When ITERate map or set, Helmholtz can not use the condition about the order of the iteration.
 
 ### Q&A
 - Error `misaligned expression` is output
