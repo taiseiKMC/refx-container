@@ -1,114 +1,7 @@
-# Abstract
-
-Helmholtz is a static verification tool for Michelson---a smart contract language used in Tezos blockchain protocol. This tool takes a Michelson program annotated with a user-defined specification written in the form of a refinement type as input; it then typechecks the program against the specification based on our refinement type system, discharging the generated verification conditions with an SMT solver Z3.
-Helmholtz is implemented as a subcommand of `tezos-client`, which is the client of Tezos blockchain.
-
-This artifact is a docker container that provides an environment in which Helmholtz can be run.  The artifact also includes sample Michelson programs so that one can quickly try Helmholtz and confirm that the results in the accompanying paper is reproducible.
-
-# Licence
-
-Copyright (c) 2020 Igarashi Lab.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
-
-> Readme.txtここから
 # Helmholtz
 
 Helmholtz is a static verification tool for a stack-based programming language [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html), a smart contract language used in [Tezos](https://tezos.gitlab.io/) blockchain protocol.  It verifies that a Michelson program satisfies a user-written formal specification.
 
-
-## Quickstart
-To verify `src.tz` in <path-in-the-host> directory, sequentially execute the following commands in the host.
-```
-% unzip helmholtz.zip
-% tar zxvf helmholtz/docker-19.03.9.tgz
-% sudo cp docker/* /usr/bin
-% sudo dockerd &
-% sudo docker load --input helmholtz/helmholtz.img
-% sudo docker run -it helmholtz -v <path-in-the-host>:/home/opam/ReFX/mount tezos-client refinement mount/src.tz
-```
-
-
-## To reproduce the experimental result in the paper (for TACAS 2021 AEC)
-
-The following two files are in the submitted zip file.
-- .tgz package to install docker.
-- .img file of the image of a Docker container of the artifact.
-
-To install the artifact on the VM, execute the following commands:
-
-```
-% unzip helmholtz.zip                               # Extract the zip
-% tar zxvf helmholtz/docker-19.03.9.tgz
-% sudo cp docker/* /usr/bin                         # Install Docker
-% sudo dockerd &                                    # Run docker daemon
-% sudo docker load --input helmholtz/helmholtz.img  # Load the container
-```
-
-And the following commands reproduce Table 1 in the paper. (Output time depends on the environment)
-```
-% sudo docker run -it helmholtz ./run_tacas2021_contracts.sh
-```
-| contract name          | #instr | time(ms) |
-|:-----------------------|-------:|---------:|
-| boomerang.tz           |     17 |       35 |
-| checksig.tz            |     38 |       65 |
-| checksig_unverified.tz |     36 |       62 |
-| deposit.tz             |     24 |       54 |
-| manager.tz             |     29 |       60 |
-| reservoir.tz           |     45 |       87 |
-| triangular_num.tz      |     16 |       35 |
-| vote.tz                |     24 |       62 |
-| vote_for_delegate.tz   |     87 |      143 |
-| xcat.tz                |     64 |      188 |
-
-The contracts we used in the experiments are placed in `~/ReFX/test_contracts/tacas2021`. You can verify each contract by running `sudo docker run -it helmholtz tezos-client refinement test_contracts/tacas2021/<contract name>`.
-
-
-### Detailed explanation of each command
-
-- `sudo docker run -it helmholtz <command>` will run `<command>` running in an environment that can execute Helmholtz.
-    - If you want to work in the container, execute `bash` as `<command>`
-    - To share a directory with the host, run `docker run -it -v <path-in-the-host>:/home/opam/ReFX/mount helmholtz <command>`
-    - Tezos should be running in a sandbox inside the container.
-- To verify an annotated Michelson program `src.tz`, run `tezos-client refinement src.tz`.  You can write a s dirctly as a string instead of the file name `src.tz`.
-    - Annotations are to give a formal specification (i.e., an intended behavior) and hints (e.g., a loop invariant) to a Michelson program.  See below for a detail.
-- You can execute any subcommand of `tezos-client` (cf., [Tezos Whitedoc](https://tezos.gitlab.io/api/cli-commands.html?highlight=tezos%20client))
-    - The version of the tezos running in the container is `005_PsBabyM1 Babylon`.
-
-
-## Example: Boomerang
-```boomerang.tz
-{
-  parameter unit;
-  storage unit;
-  << ContractAnnot { arg | True } ->
-      { ops, _ | match ops with [TransferTokens<unit> Unit tz (Contract addr)] -> addr = source && tz = balance | _ -> False } &
-      { exc | False } >>
-  code  { CDR ;
-          NIL operation ;
-          SOURCE ;
-          CONTRACT unit ;
-          ASSERT_SOME ;
-          BALANCE ;
-          UNIT ;
-          TRANSFER_TOKENS ;
-          CONS ;
-          PAIR ;
-        }
-}
-```
-The above code, which is the contents of `boomerang.tz` in the container, is a Michelson program that transfers money amout `balance` to an account `source`.  The program comes with an annotation surrounded by `<<` and `>>`.  
-This annotation, which is labeled by a constructor `ContractAnnot`, states the following two properties.
-
-+ The pair `(ops, _)`, which is in the stack at the end of the program, satisfies `ops = [TransferTokens Unit balance addr]`; this operation means that this contract will send money amount `balance` to `addr` with argument `Unit` after this contract finishes.
-+ No exceptions are raised from the instructions in this program; this is expressed by the part `... & { exc | False }`.  There is an `ASSERT_SOME` instruction in the program that may raise an exception when the stack top is `None`, but since, from the specification of Michelson, the account pointed to by `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so no exception will be raised. 
-
-If you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`.
 
 
 ## How Helmholtz works
@@ -116,9 +9,8 @@ If you run `tezos-client refinement boomerang.tz`, you will get `VERIFIED`.
 Helmholtz accepts a [Michelson](https://tezos.gitlab.io/whitedoc/michelson.html) program annotaed with its formal specification and hints (e.g., loop invariants) used by Helmholtz.  An annotation is surrounded by `<<` and `>>`.
 
 Helmholtz works as follows.
-- If `tezos-client refinement <src>` is executed, Helmholtz strips the annotations surrounded by `<<` and `>>` and typechecks the stripped code using `tezos-client typecheck`; the simple type checking is conducted in this step.
-- After typechecking, `tezos-client refinement` generates verification conditions based on the type system described in the accompanying paper.
-    - Generated verification conditions is stored in `.refx/out.smt2` or in the directory given by `-l` option.
+- If it is executed, Helmholtz strips the annotations surrounded by `<<` and `>>` and typechecks the stripped code using `tezos-client typecheck`; the simple type checking is conducted in this step.
+- After typechecking, it generates verification conditions.
 - Then, Helmholtz discharges the conditions with `z3` and outputs `VERIFIED` or `UNVERIFIED`.
 
 ## Spec of Assertion Language
@@ -350,6 +242,36 @@ There are 6 types of annotations below.
     - This is an syntax error output by Helmholtz. Please check the annotations you give.
 
 ## Examples
+
+## boomerang.tz
+```boomerang.tz
+{
+  parameter unit;
+  storage unit;
+  << ContractAnnot { arg | True } ->
+      { ops, _ | match ops with [TransferTokens<unit> Unit tz (Contract addr)] -> addr = source && tz = balance | _ -> False } &
+      { exc | False } >>
+  code  { CDR ;
+          NIL operation ;
+          SOURCE ;
+          CONTRACT unit ;
+          ASSERT_SOME ;
+          BALANCE ;
+          UNIT ;
+          TRANSFER_TOKENS ;
+          CONS ;
+          PAIR ;
+        }
+}
+```
+The above code, which is the contents of `boomerang.tz` in the container, is a Michelson program that transfers money amout `balance` to an account `source`.  The program comes with an annotation surrounded by `<<` and `>>`.  
+This annotation, which is labeled by a constructor `ContractAnnot`, states the following two properties.
+
++ The pair `(ops, _)`, which is in the stack at the end of the program, satisfies `ops = [TransferTokens Unit balance addr]`; this operation means that this contract will send money amount `balance` to `addr` with argument `Unit` after this contract finishes.
++ No exceptions are raised from the instructions in this program; this is expressed by the part `... & { exc | False }`.  There is an `ASSERT_SOME` instruction in the program that may raise an exception when the stack top is `None`, but since, from the specification of Michelson, the account pointed to by `source` should be a human-operated account, the `CONTRACT unit` should always return `Some`, so no exception will be raised. 
+
+If you verify this program, you will get `VERIFIED`.
+
 ### checksig.tz
 ```
 parameter (pair signature string);
@@ -403,3 +325,14 @@ This program checks the signature given by the parameter is valid and the contra
 ```
 
 This contract computes the sum of the integers in the list passed as a parameter.  The `ContractAnnot` annotation uses the function `sumseq`, which is defined in the earlier `Measure` annotation.  In the `code` section, the `Assume` annotation is used to specify that `l`, which is declared to be a ghost variable in the `ContractAnnot`, is the list passed as a parameter.  `LoopInv` gives the loop-invariant for `ITER`. `ITER { ADD }` is an instruction that adds the head of the list to the second `s` from the top of the stack. The loop-invariant condition `s + sumseq r = sumseq l` expresses that adding `s` to the sum of list `r` in process equals the sum of the list `l`.
+
+
+# Licence
+
+Copyright (c) 2020 Igarashi Lab.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
